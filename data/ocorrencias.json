@@ -1,0 +1,38 @@
+{
+  "ocorrencias": [
+    {
+      "id": 2,
+      "tipo": "Furto",
+      "loja": "Loja 04",
+      "descricao": "Homem coloca 4 produtos na calça, alertado pelo veesion, não conseguimos recuperar itens, pois estava na hora de almoço da segurança da loja.",
+      "solicitante_tipo": "Operador CFTV",
+      "solicitante_nome": "Veesion",
+      "situacao": "Roubo Confirmado",
+      "produto": "Shampoo; condicionador",
+      "valor": 40,
+      "finalizador": "Lucas",
+      "midia": "https://supermercadojb-my.sharepoint.com/:f:/g/personal/cftv_supermercadosjb_com_br/IgBC_vr2bUpRQKHTDw47UoWoAetMbC_ulCYcTEt6Rj4V8fc?e=LOsoaO",
+      "dataHora": "2026-09-03T16:28:00.000Z"
+    }
+  ],
+  "operadores": [
+    {
+      "id": "1",
+      "nome": "test",
+      "senha": "$2b$10$CNL3z5NkLc1rBXTtEhZR.ekFpVMsVf5gbOR93axjjg/9yv15czf9G",
+      "mustChangePassword": false
+    },
+    {
+      "nome": "first",
+      "id": "2",
+      "mustChangePassword": true,
+      "senha": "$2b$10$f29U1IWepWGkun/i4YD0Ju/rVegnNrLGW./8Ij8dQM8nACIU/L8jy"
+    },
+    {
+      "nome": "Lucas",
+      "id": "3",
+      "mustChangePassword": false,
+      "senha": "$2b$10$EkDQ1qFrkPI7GDGIcYkvvO4js0GQd998YXrfsfb92rJl50PEclOaC"
+    }
+  ]
+}

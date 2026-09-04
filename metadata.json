@@ -1,0 +1,6 @@
+{
+  "name": "Sistema de Ocorrências CFTV",
+  "description": "Sistema para registro e controle de ocorrências de monitoramento CFTV com formulário em etapas e histórico de registros.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
