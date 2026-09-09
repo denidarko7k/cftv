@@ -64,6 +64,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 text-white text-xs sm:text-sm">
+        <div className="text-left font-mono">
+          <p className="font-semibold text-slate-100 text-xs sm:text-sm">{dateStr || 'CARREGANDO'}</p>
+          <p className="text-[11px] sm:text-xs text-slate-300">{timeStr || '--:--:--'}</p>
+        </div>
+
+        <div className="w-px h-8 bg-slate-400/30 hidden sm:block"></div>
+
         {/* Operador em Serviço */}
         <div className="flex items-center gap-1.5">
           <button
@@ -100,12 +107,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="text-[11px] font-bold hidden md:inline">Sair</span>
             </button>
           )}
-        </div>
-
-        <div className="w-px h-8 bg-slate-400/30 hidden sm:block"></div>
-        <div className="text-right font-mono">
-          <p className="font-semibold text-slate-100 text-xs sm:text-sm">{dateStr || 'CARREGANDO'}</p>
-          <p className="text-[11px] sm:text-xs text-slate-300">{timeStr || '--:--:--'}</p>
         </div>
       </div>
     </header>
