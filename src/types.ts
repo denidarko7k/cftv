@@ -42,6 +42,27 @@ export interface Ocorrencia {
   dataHora: string; // ISO string or formatted string
 }
 
+export interface InternalAnalysisRecord {
+  id: number;
+  dataOperacao: string;
+  dataAnalise: string;
+  horario: string;
+  loja: string;
+  tipo: string;
+  pdv: string;
+  operador: string;
+  supervisor: string;
+  valor: number;
+  parecer: string;
+  status: string;
+  motivoOperador: string;
+  procedimentoIncorreto: string;
+  observacoesAnalista: string;
+  evidencia: string[];
+  onedriveLink: string;
+  imagens?: string[];
+}
+
 export interface FormStepData {
   tipo: TipoOcorrencia | '';
   loja: string;
@@ -56,4 +77,4 @@ export interface FormStepData {
   midia: string;
 }
 
-export const LOJAS_GRUPO = Array.from({ length: 16 }, (_, i) => `Loja ${String(i + 1).padStart(2, '0')}`);
+export const LOJAS_GRUPO = [...Array.from({ length: 16 }, (_, i) => `Loja ${String(i + 1).padStart(2, '0')}`), 'Atacado'];

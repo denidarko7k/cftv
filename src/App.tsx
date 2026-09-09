@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { OccurrenceForm } from './components/OccurrenceForm';
+import { InternalAnalysisForm } from './components/InternalAnalysisForm';
 import { OccurrenceList } from './components/OccurrenceList';
+import { InternalAnalysisList } from './components/InternalAnalysisList';
+import { InternalAnalysisDetailModal } from './components/InternalAnalysisDetailModal';
 import { OccurrenceDetailModal } from './components/OccurrenceDetailModal';
 import { OperatorModal } from './components/OperatorModal';
 import { LoginScreen } from './components/LoginScreen';
-import { Ocorrencia, Operador } from './types';
+import { InternalAnalysisRecord, Ocorrencia, Operador } from './types';
 import { INITIAL_OCORRENCIAS } from './data/mockOcorrencias';
 import { Shield, RotateCcw, Lock, LogOut } from 'lucide-react';
 
@@ -13,6 +16,7 @@ const STORAGE_KEY = 'cftv_ocorrencias_v2';
 const OPERATORS_KEY = 'cftv_operadores_v2';
 const ACTIVE_OPERATOR_KEY = 'cftv_active_operador_v2';
 const AUTH_SESSION_KEY = 'cftv_auth_session_v2';
+const INTERNAL_ANALYSES_KEY = 'cftv_analises_internas_v1';
 
 const DEFAULT_OPERADORES: Operador[] = [
   { id: '1', nome: 'Denisson', senha: 'jb@jbti123', mustChangePassword: true },
@@ -75,6 +79,60 @@ export default function App() {
 
   const [isOperatorModalOpen, setIsOperatorModalOpen] = useState(false);
   const [selectedOcorrencia, setSelectedOcorrencia] = useState<Ocorrencia | null>(null);
+  const [selectedInternalAnalysis, setSelectedInternalAnalysis] = useState<InternalAnalysisRecord | null>(null);
+
+  const [leftPanelMode, setLeftPanelMode] = useState<'occurrence' | 'analysis'>(() => (
+    window.location.pathname === '/analise-interna' ? 'analysis' : 'occurrence'
+  ));
+  const navigateTo = (mode: 'occurrence' | 'analysis') => {
+    const path = mode === 'analysis' ? '/analise-interna' : '/ocorrencias';
+    if (window.location.pathname !== path) window.history.pushState({}, '', path);
+    setLeftPanelMode(mode);
+  };
+
+  useEffect(() => {
+    const handlePopState = () => setLeftPanelMode(window.location.pathname === '/analise-interna' ? 'analysis' : 'occurrence');
+    window.addEventListener('popstate', handlePopState);
+    if (window.location.pathname !== '/analise-interna' && window.location.pathname !== '/ocorrencias') {
+      window.history.replaceState({}, '', '/ocorrencias');
+    }
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+  const [internalAnalyses, setInternalAnalyses] = useState<InternalAnalysisRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(INTERNAL_ANALYSES_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => ({
+            ...item,
+            status: item.status === 'Concluído' || item.status === 'Aprovado' ? 'Concluido' : 'Em analise',
+          }));
+        }
+      }
+    } catch {
+      // Fallback to the sample record.
+    }
+    return [{
+      id: 1,
+      dataOperacao: '09/09/2026',
+      dataAnalise: '09/09/2026',
+      horario: '08:26',
+      loja: 'Loja 01',
+      tipo: 'Furto',
+      pdv: '01',
+      operador: 'Nome do operador',
+      supervisor: 'Nome do supervisor',
+      valor: 0,
+      parecer: 'Pendente',
+      status: 'Em analise',
+      motivoOperador: 'Motivo declarado pelo operador...',
+      procedimentoIncorreto: 'Descreva o que foi feito incorretamente...',
+      observacoesAnalista: 'Observações técnicas do analista...',
+      evidencia: ['Devolução processada de forma incorreta'],
+      onedriveLink: '',
+    }];
+  });
 
   // Sync to localStorage
   useEffect(() => {
@@ -84,6 +142,14 @@ export default function App() {
       // Storage quota or disabled
     }
   }, [ocorrencias]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(INTERNAL_ANALYSES_KEY, JSON.stringify(internalAnalyses));
+    } catch {
+      // Storage quota or disabled.
+    }
+  }, [internalAnalyses]);
 
   // Fetch ocorrencias from API on mount and subscribe to server-sent events
   useEffect(() => {
@@ -100,12 +166,48 @@ export default function App() {
         // ignore
       });
 
+    fetch(`${apiBase}/api/analises-internas`)
+      .then((r) => r.json())
+      .then(async (data) => {
+        if (!Array.isArray(data)) return;
+        if (data.length > 0) {
+          setInternalAnalyses(data);
+          return;
+        }
+
+        // Migrate analyses created before shared server storage was added.
+        const saved = localStorage.getItem(INTERNAL_ANALYSES_KEY);
+        if (!saved) return;
+        const localAnalyses = JSON.parse(saved);
+        if (!Array.isArray(localAnalyses) || localAnalyses.length === 0) return;
+        const migrated = await Promise.all(localAnalyses.map((item) =>
+          fetch(`${apiBase}/api/analises-internas`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...item, id: undefined }),
+          }).then((response) => response.ok ? response.json() : null).catch(() => null)
+        ));
+        const validMigrated = migrated.filter(Boolean);
+        if (validMigrated.length > 0) setInternalAnalyses(validMigrated.reverse());
+      })
+      .catch(() => {
+        // Keep local analyses available when the API is offline.
+      });
+
     try {
       es = new EventSource(`${apiBase}/api/stream`);
       es.addEventListener('ocorrencias', (ev: MessageEvent) => {
         try {
           const data = JSON.parse(ev.data);
           if (Array.isArray(data)) setOcorrencias(data);
+        } catch {
+          // ignore parse
+        }
+      });
+      es.addEventListener('analises-internas', (ev: MessageEvent) => {
+        try {
+          const data = JSON.parse(ev.data);
+          if (Array.isArray(data)) setInternalAnalyses(data);
         } catch {
           // ignore parse
         }
@@ -193,14 +295,14 @@ export default function App() {
     }
   };
 
-  const handleUpdatePassword = async (operadorId: string, newSenha: string) => {
+  const handleUpdatePassword = async (operadorId: string, newSenha: string, currentSenha = ''): Promise<boolean> => {
     const host = window.location.hostname || '127.0.0.1';
     const apiBase = `http://${host}:4000`;
     try {
       const res = await fetch(`${apiBase}/api/operadores/${operadorId}/password`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ senha: newSenha }),
+        body: JSON.stringify({ senha: newSenha, senhaAtual: currentSenha }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -208,21 +310,14 @@ export default function App() {
           prev.map((op) => (op.id === operadorId ? { ...op, senha: updated.senha, mustChangePassword: false } : op))
         );
         if (activeOperador.id === operadorId) {
-          setActiveOperador((prev) => ({ ...prev, senha: newSenha, mustChangePassword: false }));
+          setActiveOperador((prev) => ({ ...prev, senha: '', mustChangePassword: false }));
         }
-        return;
+        return true;
       }
     } catch (e) {
-      // ignore and fallback to local update
+      // Keep the password change pending until the backend is reachable.
     }
-
-    // Fallback when backend not reachable: update locally
-    setOperadores((prev) =>
-      prev.map((op) => (op.id === operadorId ? { ...op, senha: newSenha, mustChangePassword: false } : op))
-    );
-    if (activeOperador.id === operadorId) {
-      setActiveOperador((prev) => ({ ...prev, senha: newSenha, mustChangePassword: false }));
-    }
+    return false;
   };
 
   const handleAddOcorrencia = (
@@ -260,6 +355,34 @@ export default function App() {
       });
   };
 
+  const handleAddInternalAnalysis = (item: Omit<InternalAnalysisRecord, 'id'>) => {
+    navigateTo('analysis');
+    const host = window.location.hostname || '127.0.0.1';
+    const apiBase = `http://${host}:4000`;
+    fetch(`${apiBase}/api/analises-internas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Não foi possível salvar a análise');
+        return response.json();
+      })
+      .then((saved) => setInternalAnalyses((prev) => [saved, ...prev.filter((entry) => entry.id !== saved.id)]))
+      .catch(() => setInternalAnalyses((prev) => [{ ...item, id: Date.now() }, ...prev]));
+  };
+
+  const handleDeleteInternalAnalysis = (id: number) => {
+    const host = window.location.hostname || '127.0.0.1';
+    const apiBase = `http://${host}:4000`;
+    fetch(`${apiBase}/api/analises-internas/${id}`, { method: 'DELETE' })
+      .then((response) => {
+        if (!response.ok) throw new Error('Não foi possível excluir a análise');
+        setInternalAnalyses((prev) => prev.filter((item) => item.id !== id));
+      })
+      .catch(() => setInternalAnalyses((prev) => prev.filter((item) => item.id !== id)));
+  };
+
   const handleResetSampleData = () => {
     if (
       confirm(
@@ -284,21 +407,56 @@ export default function App() {
       {/* Main Container */}
       <main className="flex-1 w-full max-w-full mx-auto p-4 sm:p-6 flex flex-col lg:flex-row gap-6 items-start">
         {/* Formulário (Esquerda) - aumentado para preencher espaço */}
-        <div className="w-full lg:w-[440px] shrink-0">
-          <OccurrenceForm
-            onSubmit={handleAddOcorrencia}
-            activeOperador={activeOperador}
-          />
+        <div className="w-full lg:w-[440px] shrink-0 flex flex-col gap-4">
+          <div className="flex bg-slate-200 p-1 rounded-md">
+            <button
+              onClick={() => navigateTo('occurrence')}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-colors ${
+                leftPanelMode === 'occurrence'
+                  ? 'bg-white text-[#003366] shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Nova Ocorrência
+            </button>
+            <button
+              onClick={() => navigateTo('analysis')}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-colors ${
+                leftPanelMode === 'analysis'
+                  ? 'bg-white text-[#003366] shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Análise Interna
+            </button>
+          </div>
+
+          {leftPanelMode === 'occurrence' ? (
+            <OccurrenceForm
+              onSubmit={handleAddOcorrencia}
+              activeOperador={activeOperador}
+            />
+          ) : (
+            <InternalAnalysisForm
+              activeOperador={activeOperador?.nome || 'Operador'}
+              onSubmit={handleAddInternalAnalysis}
+              onClose={() => navigateTo('occurrence')}
+            />
+          )}
         </div>
 
         {/* Lista de Registros + KPIs (Direita) - maior área para registros recentes */}
         <div className="flex-1 w-full min-w-0 lg:pl-6">
           <div className="h-[72vh]">
-          <OccurrenceList
-            ocorrencias={ocorrencias}
-            onSelectOcorrencia={setSelectedOcorrencia}
-            onDeleteOcorrencia={handleDeleteOcorrencia}
-          />
+          {leftPanelMode === 'analysis' ? (
+            <InternalAnalysisList analises={internalAnalyses} onSelectAnalise={setSelectedInternalAnalysis} />
+          ) : (
+            <OccurrenceList
+              ocorrencias={ocorrencias}
+              onSelectOcorrencia={setSelectedOcorrencia}
+              onDeleteOcorrencia={handleDeleteOcorrencia}
+            />
+          )}
           </div>
         </div>
       </main>
@@ -373,6 +531,14 @@ export default function App() {
           ocorrencia={selectedOcorrencia}
           onClose={() => setSelectedOcorrencia(null)}
           onDelete={handleDeleteOcorrencia}
+        />
+      )}
+
+      {selectedInternalAnalysis && (
+        <InternalAnalysisDetailModal
+          analise={selectedInternalAnalysis}
+          onClose={() => setSelectedInternalAnalysis(null)}
+          onDelete={handleDeleteInternalAnalysis}
         />
       )}
     </div>

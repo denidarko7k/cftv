@@ -21,7 +21,7 @@ interface OperatorModalProps {
   onSelectOperador: (operador: Operador) => void;
   onAddOperador: (operador: Omit<Operador, 'id'>) => void;
   onDeleteOperador: (id: string) => void;
-  onUpdatePassword: (operadorId: string, newSenha: string) => void;
+  onUpdatePassword: (operadorId: string, newSenha: string, currentSenha?: string) => Promise<boolean>;
   onLockTerminal: () => void;
 }
 
@@ -47,7 +47,7 @@ export const OperatorModal: React.FC<OperatorModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
@@ -55,12 +55,6 @@ export const OperatorModal: React.FC<OperatorModalProps> = ({
     const trimmedCurrent = currentPassInput.trim();
     const trimmedNew = newPassInput.trim();
     const trimmedConfirm = confirmNewPassInput.trim();
-
-    // Verify current password
-    if (trimmedCurrent !== activeOperador.senha && trimmedCurrent !== DEFAULT_PASSWORD) {
-      setError('A senha atual digitada está incorreta.');
-      return;
-    }
 
     // Verify new password
     if (!trimmedNew || trimmedNew.length < 4) {
@@ -79,7 +73,12 @@ export const OperatorModal: React.FC<OperatorModalProps> = ({
     }
 
     setIsSubmitting(true);
-    onUpdatePassword(activeOperador.id, trimmedNew);
+    const saved = await onUpdatePassword(activeOperador.id, trimmedNew, trimmedCurrent);
+    if (!saved) {
+      setError('Não foi possível salvar a senha no servidor. Tente novamente.');
+      setIsSubmitting(false);
+      return;
+    }
 
     setSuccessMsg('Senha alterada com sucesso!');
     setCurrentPassInput('');

@@ -10,12 +10,13 @@ import fs from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PASSWORD = 'jb@jbti123';
+const DEFAULT_OPERATOR_NAMES = ['Denisson', 'Cássio', 'Jhonata', 'Jhony', 'Lucas'];
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '15mb' }));
 
 const dataDir = `${__dirname}/../data`;
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
@@ -39,9 +40,37 @@ function broadcastOcorrencias() {
   }
 }
 
+function broadcastAnalises() {
+  const payload = JSON.stringify((db.data?.analisesInternas || []).slice().reverse());
+  for (const res of sseClients) {
+    try {
+      res.write(`event: analises-internas\n`);
+      res.write(`data: ${payload}\n\n`);
+    } catch (e) {
+      // ignore write errors
+    }
+  }
+}
+
 async function initDB() {
   await db.read();
-  db.data ||= { ocorrencias: [], operadores: [] };
+  db.data ||= { ocorrencias: [], analisesInternas: [], operadores: [] };
+  db.data.ocorrencias ||= [];
+  db.data.analisesInternas ||= [];
+  db.data.operadores ||= [];
+
+  const existingNames = new Set(db.data.operadores.map((operator) => String(operator.nome).toLowerCase()));
+  let nextId = db.data.operadores.reduce((max, operator) => Math.max(max, Number(operator.id) || 0), 0) + 1;
+  for (const nome of DEFAULT_OPERATOR_NAMES) {
+    if (!existingNames.has(nome.toLowerCase())) {
+      db.data.operadores.push({
+        id: String(nextId++),
+        nome,
+        senha: bcrypt.hashSync(DEFAULT_PASSWORD, 10),
+        mustChangePassword: true,
+      });
+    }
+  }
   await db.write();
 }
 
@@ -51,6 +80,40 @@ app.get('/api/ocorrencias', async (req, res) => {
   await db.read();
   const rows = (db.data?.ocorrencias || []).slice().reverse();
   res.json(rows);
+});
+
+app.get('/api/analises-internas', async (req, res) => {
+  await db.read();
+  res.json((db.data?.analisesInternas || []).slice().reverse());
+});
+
+app.post('/api/analises-internas', async (req, res) => {
+  await db.read();
+  const item = req.body || {};
+  const nextId = ((db.data?.analisesInternas || []).reduce((max, row) => Math.max(max, Number(row.id) || 0), 0) || 0) + 1;
+  const newRow = {
+    ...item,
+    id: nextId,
+    valor: Number(item.valor) || 0,
+    evidencia: Array.isArray(item.evidencia) ? item.evidencia : [],
+    imagens: Array.isArray(item.imagens) ? item.imagens : [],
+    onedriveLink: String(item.onedriveLink || ''),
+  };
+  db.data.analisesInternas.push(newRow);
+  await db.write();
+  broadcastAnalises();
+  res.status(201).json(newRow);
+});
+
+app.delete('/api/analises-internas/:id', async (req, res) => {
+  await db.read();
+  const id = Number(req.params.id);
+  const before = db.data.analisesInternas.length;
+  db.data.analisesInternas = db.data.analisesInternas.filter((row) => Number(row.id) !== id);
+  if (before === db.data.analisesInternas.length) return res.status(404).json({ error: 'Análise não encontrada' });
+  await db.write();
+  broadcastAnalises();
+  res.json({ success: true });
 });
 
 // Operators endpoints
@@ -80,10 +143,15 @@ app.put('/api/operadores', async (req, res) => {
 app.patch('/api/operadores/:id/password', async (req, res) => {
   await db.read();
   const id = String(req.params.id);
-  const { senha } = req.body || {};
+  const { senha, senhaAtual } = req.body || {};
   if (!senha) return res.status(400).json({ error: 'Senha obrigatória' });
   const idx = (db.data.operadores || []).findIndex((o) => String(o.id) === String(id));
   if (idx === -1) return res.status(404).json({ error: 'Operador não encontrado' });
+  const current = db.data.operadores[idx].senha || '';
+  const currentMatches = typeof current === 'string' && current.startsWith('$2')
+    ? bcrypt.compareSync(String(senhaAtual || ''), current)
+    : String(senhaAtual || '') === String(current);
+  if (!currentMatches) return res.status(401).json({ error: 'Senha atual incorreta' });
   // Hash the new password before saving
   db.data.operadores[idx].senha = bcrypt.hashSync(String(senha), 10);
   db.data.operadores[idx].mustChangePassword = false;
@@ -135,6 +203,9 @@ app.get('/api/stream', async (req, res) => {
   const initData = JSON.stringify((db.data?.ocorrencias || []).slice().reverse());
   res.write(`event: ocorrencias\n`);
   res.write(`data: ${initData}\n\n`);
+  const initAnalises = JSON.stringify((db.data?.analisesInternas || []).slice().reverse());
+  res.write(`event: analises-internas\n`);
+  res.write(`data: ${initAnalises}\n\n`);
 
   sseClients.add(res);
   req.on('close', () => {

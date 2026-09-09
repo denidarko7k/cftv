@@ -19,7 +19,7 @@ interface LoginScreenProps {
   activeOperador: Operador | null;
   onLoginSuccess: (operador: Operador) => void;
   onRegisterOperador: (operador: Omit<Operador, 'id'>) => void;
-  onUpdatePassword: (operadorId: string, newSenha: string) => void;
+  onUpdatePassword: (operadorId: string, newSenha: string, currentSenha?: string) => Promise<boolean>;
 }
 
 const DEFAULT_PASSWORD = 'jb@jbti123';
@@ -80,13 +80,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       .then(async (r) => {
         if (r.ok) {
           const op = await r.json();
-          // backend may return operador without senha (masked)
           const operador: Operador = {
             id: op.id,
             nome: op.nome,
-            senha: '',
+            senha: op.mustChangePassword ? trimmedPass : '',
             mustChangePassword: op.mustChangePassword || false,
           };
+
+          if (operador.mustChangePassword) {
+            setPendingOperator(operador);
+            setMode('first_access_reset');
+            setNewSenha('');
+            setConfirmNewSenha('');
+            return;
+          }
+
           onLoginSuccess(operador);
           return;
         }
@@ -133,7 +141,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       });
   };
 
-  const handleSaveFirstAccessPassword = (e: React.FormEvent) => {
+  const handleSaveFirstAccessPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -157,11 +165,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     }
 
     // Update password
-    onUpdatePassword(pendingOperator.id, trimmedNew);
+    const saved = await onUpdatePassword(pendingOperator.id, trimmedNew, pendingOperator.senha);
+    if (!saved) {
+      setError('Não foi possível salvar a senha no servidor. Tente novamente.');
+      return;
+    }
 
     const updatedOperator: Operador = {
       ...pendingOperator,
-      senha: trimmedNew,
+      senha: '',
       mustChangePassword: false,
     };
 
