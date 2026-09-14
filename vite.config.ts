@@ -12,6 +12,17 @@ export default defineConfig(() => {
       },
     },
     server: {
+      host: '0.0.0.0',
+      port: 3000,
+      strictPort: true,
+      proxy: {
+        '/api': {
+          target: process.env.VITE_API_BASE_URL || 'http://api.cftv.jb:4000',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path,
+        },
+      },
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',

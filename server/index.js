@@ -4,6 +4,7 @@ import bodyParser from 'body-parser';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -14,9 +15,12 @@ const DEFAULT_OPERATOR_NAMES = ['Denisson', 'Cássio', 'Jhonata', 'Jhony', 'Luca
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+const SESSION_COOKIE_NAME = 'sessionToken';
+const SESSION_COOKIE_DOMAIN = process.env.SESSION_COOKIE_DOMAIN || '';
 
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(bodyParser.json({ limit: '15mb' }));
+app.use(authRequired);
 
 const dataDir = `${__dirname}/../data`;
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
@@ -27,6 +31,76 @@ const db = new Low(adapter, { ocorrencias: [], operadores: [] });
 
 // SSE clients
 const sseClients = new Set();
+const sessions = new Map();
+
+function createSessionToken(operador) {
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, {
+    id: String(operador.id),
+    nome: operador.nome,
+    expiresAt: Date.now() + 60 * 60 * 1000,
+  });
+  return token;
+}
+
+function getCookieValue(cookieHeader, name) {
+  const cookies = String(cookieHeader || '').split(';');
+  const found = cookies.find((entry) => entry.trim().startsWith(`${name}=`));
+  return found ? found.trim().slice(name.length + 1) : '';
+}
+
+function setSessionCookie(res, token, clear = false) {
+  const cookieOptions = [
+    'HttpOnly',
+    'Path=/',
+    'SameSite=Lax',
+    clear ? 'Max-Age=0' : 'Max-Age=3600',
+  ];
+
+  if (process.env.NODE_ENV === 'production') {
+    cookieOptions.push('Secure');
+  }
+
+  if (SESSION_COOKIE_DOMAIN) {
+    cookieOptions.push(`Domain=${SESSION_COOKIE_DOMAIN}`);
+  }
+
+  res.setHeader(
+    'Set-Cookie',
+    `${SESSION_COOKIE_NAME}=${clear ? '' : token}; ${cookieOptions.join('; ')}`
+  );
+}
+
+function authRequired(req, res, next) {
+  if (req.method === 'OPTIONS') return next();
+
+  const isLoginRoute = req.path === '/api/login' || req.path === '/api/logout';
+  const isPublicOperatorsRoute = req.method === 'GET' && req.path === '/api/operadores';
+  if (isLoginRoute || isPublicOperatorsRoute) return next();
+
+  const authHeader = String(req.headers.authorization || '');
+  const cookieToken = getCookieValue(req.headers.cookie || '', SESSION_COOKIE_NAME);
+  const token = authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7)
+    : cookieToken || String(req.query.token || '');
+
+  if (!token) {
+    return res.status(401).json({ error: 'Não autenticado' });
+  }
+
+  const session = sessions.get(token);
+  if (!session) {
+    return res.status(401).json({ error: 'Sessão inválida ou expirada' });
+  }
+
+  if (session.expiresAt <= Date.now()) {
+    sessions.delete(token);
+    return res.status(401).json({ error: 'Sessão expirada' });
+  }
+
+  req.session = session;
+  next();
+}
 
 function broadcastOcorrencias() {
   const payload = JSON.stringify((db.data?.ocorrencias || []).slice().reverse());
@@ -148,9 +222,13 @@ app.patch('/api/operadores/:id/password', async (req, res) => {
   const idx = (db.data.operadores || []).findIndex((o) => String(o.id) === String(id));
   if (idx === -1) return res.status(404).json({ error: 'Operador não encontrado' });
   const current = db.data.operadores[idx].senha || '';
-  const currentMatches = typeof current === 'string' && current.startsWith('$2')
-    ? bcrypt.compareSync(String(senhaAtual || ''), current)
-    : String(senhaAtual || '') === String(current);
+  const operatorRequiresPasswordChange = db.data.operadores[idx].mustChangePassword === true;
+  const currentMatches =
+    operatorRequiresPasswordChange && String(senhaAtual || '') === DEFAULT_PASSWORD
+      ? true
+      : typeof current === 'string' && current.startsWith('$2')
+        ? bcrypt.compareSync(String(senhaAtual || ''), current)
+        : String(senhaAtual || '') === String(current);
   if (!currentMatches) return res.status(401).json({ error: 'Senha atual incorreta' });
   // Hash the new password before saving
   db.data.operadores[idx].senha = bcrypt.hashSync(String(senha), 10);
@@ -170,6 +248,8 @@ app.post('/api/login', async (req, res) => {
   // the operator record requires a password change (`mustChangePassword`).
   if (op.mustChangePassword === true && String(senha) === DEFAULT_PASSWORD) {
     const safe = { ...op, senha: undefined };
+    const token = createSessionToken(op);
+    setSessionCookie(res, token);
     return res.json(safe);
   }
 
@@ -188,7 +268,29 @@ app.post('/api/login', async (req, res) => {
   if (!match) return res.status(401).json({ error: 'Usuário ou senha incorretos' });
   // mask senha before returning
   const safe = { ...op, senha: undefined };
+  const token = createSessionToken(op);
+  setSessionCookie(res, token);
   res.json(safe);
+});
+
+app.get('/api/session', async (req, res) => {
+  if (!req.session) {
+    return res.status(401).json({ error: 'Não autenticado' });
+  }
+
+  return res.json({ authenticated: true, user: req.session });
+});
+
+app.post('/api/logout', async (req, res) => {
+  const authHeader = String(req.headers.authorization || '');
+  const cookieToken = getCookieValue(req.headers.cookie || '', SESSION_COOKIE_NAME);
+  const token = authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7)
+    : cookieToken || String(req.query.token || '');
+
+  if (token) sessions.delete(token);
+  setSessionCookie(res, '', true);
+  res.json({ success: true });
 });
 
 // Server-Sent Events endpoint for real-time updates

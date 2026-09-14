@@ -70,11 +70,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
     const normInput = normalizeText(trimmedUser);
     // Try backend authentication first
-    const host = window.location.hostname || '127.0.0.1';
-    const apiBase = `http://${host}:4000`;
+    const apiBase = (import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname || '127.0.0.1'}:4000`).replace(/\/$/, '');
     fetch(`${apiBase}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ nome: trimmedUser, senha: trimmedPass }),
     })
       .then(async (r) => {
@@ -114,21 +114,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         }
 
         const isMatch = trimmedPass === matchedOperator.senha;
-        const isDefault = trimmedPass === DEFAULT_PASSWORD;
 
-        if (!isMatch && !isDefault) {
+        // Allow legacy local records that do not yet have the mustChangePassword
+        // flag, but do not treat an operator as first-access just because the
+        // stale local copy still stores the temporary default password.
+        const isFirstAccess =
+          matchedOperator.mustChangePassword === true ||
+          (matchedOperator.mustChangePassword == null && matchedOperator.senha === DEFAULT_PASSWORD);
+
+        if (!isMatch && !isFirstAccess) {
           setError('Usuário ou senha incorretos.');
           return;
         }
 
-        // Check if operator needs first-access password setup
-        const isFirstAccess =
-          matchedOperator.mustChangePassword === true ||
-          matchedOperator.senha === DEFAULT_PASSWORD ||
-          isDefault;
-
         if (isFirstAccess) {
-          setPendingOperator(matchedOperator);
+          // When the backend is unavailable, use the password the operator just
+          // typed as the current password for the first-access reset flow.
+          // This avoids sending the stored hash back to the server as the
+          // current password, which would make the reset request fail.
+          setPendingOperator({ ...matchedOperator, senha: trimmedPass });
           setMode('first_access_reset');
           setNewSenha('');
           setConfirmNewSenha('');
@@ -184,8 +188,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden flex flex-col">
+    <div className="min-h-screen w-full flex items-center justify-center bg-white p-4 sm:p-6">
+      <div className="bg-white rounded-2xl shadow-[0_24px_80px_rgba(15,23,42,0.12)] border border-slate-200 max-w-md w-full overflow-hidden flex flex-col">
         {/* Brand Header */}
         <div className="bg-[#003366] text-white p-6 border-b-4 border-[#cc0000] relative">
           <div className="flex items-center gap-3.5">

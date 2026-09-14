@@ -18,6 +18,13 @@ const ACTIVE_OPERATOR_KEY = 'cftv_active_operador_v2';
 const AUTH_SESSION_KEY = 'cftv_auth_session_v2';
 const INTERNAL_ANALYSES_KEY = 'cftv_analises_internas_v1';
 
+const getApiBase = () => {
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  if (configured) return configured.replace(/\/$/, '');
+  const host = window.location.hostname || '127.0.0.1';
+  return `http://${host}:4000`;
+};
+
 const DEFAULT_OPERADORES: Operador[] = [
   { id: '1', nome: 'Denisson', senha: 'jb@jbti123', mustChangePassword: true },
   { id: '2', nome: 'Cássio', senha: 'jb@jbti123', mustChangePassword: true },
@@ -77,6 +84,39 @@ export default function App() {
     }
   });
 
+  useEffect(() => {
+    const apiBase = getApiBase();
+    fetch(`${apiBase}/api/session`, {
+      credentials: 'include',
+    })
+      .then((response) => {
+        if (response.ok) {
+          setIsAuthenticated(true);
+          try {
+            sessionStorage.setItem(AUTH_SESSION_KEY, 'true');
+          } catch {
+            // Ignore
+          }
+          return;
+        }
+
+        setIsAuthenticated(false);
+        try {
+          sessionStorage.removeItem(AUTH_SESSION_KEY);
+        } catch {
+          // Ignore
+        }
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+        try {
+          sessionStorage.removeItem(AUTH_SESSION_KEY);
+        } catch {
+          // Ignore
+        }
+      });
+  }, []);
+
   const [isOperatorModalOpen, setIsOperatorModalOpen] = useState(false);
   const [selectedOcorrencia, setSelectedOcorrencia] = useState<Ocorrencia | null>(null);
   const [selectedInternalAnalysis, setSelectedInternalAnalysis] = useState<InternalAnalysisRecord | null>(null);
@@ -91,13 +131,31 @@ export default function App() {
   };
 
   useEffect(() => {
-    const handlePopState = () => setLeftPanelMode(window.location.pathname === '/analise-interna' ? 'analysis' : 'occurrence');
+    const syncRoute = () => {
+      const currentPath = window.location.pathname;
+
+      if (!isAuthenticated) {
+        if (currentPath !== '/login') {
+          window.history.replaceState({}, '', '/login');
+        }
+        return;
+      }
+
+      if (currentPath === '/login') {
+        window.history.replaceState({}, '', '/ocorrencias');
+      }
+
+      const nextMode = currentPath === '/analise-interna' ? 'analysis' : 'occurrence';
+      setLeftPanelMode(nextMode);
+    };
+
+    syncRoute();
+
+    const handlePopState = () => syncRoute();
     window.addEventListener('popstate', handlePopState);
-    if (window.location.pathname !== '/analise-interna' && window.location.pathname !== '/ocorrencias') {
-      window.history.replaceState({}, '', '/ocorrencias');
-    }
+
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [isAuthenticated]);
   const [internalAnalyses, setInternalAnalyses] = useState<InternalAnalysisRecord[]>(() => {
     try {
       const saved = localStorage.getItem(INTERNAL_ANALYSES_KEY);
@@ -154,8 +212,7 @@ export default function App() {
   // Fetch ocorrencias from API on mount and subscribe to server-sent events
   useEffect(() => {
     let es: EventSource | null = null;
-    const host = window.location.hostname || '127.0.0.1';
-    const apiBase = `http://${host}:4000`;
+    const apiBase = getApiBase();
 
     fetch(`${apiBase}/api/ocorrencias`)
       .then((r) => r.json())
@@ -195,7 +252,7 @@ export default function App() {
       });
 
     try {
-      es = new EventSource(`${apiBase}/api/stream`);
+      es = new EventSource(`${apiBase}/api/stream`, { withCredentials: true });
       es.addEventListener('ocorrencias', (ev: MessageEvent) => {
         try {
           const data = JSON.parse(ev.data);
@@ -223,9 +280,10 @@ export default function App() {
 
   // Fetch operadores from backend if available and keep in sync
   useEffect(() => {
-    const host = window.location.hostname || '127.0.0.1';
-    const apiBase = `http://${host}:4000`;
-    fetch(`${apiBase}/api/operadores`)
+    const apiBase = getApiBase();
+    fetch(`${apiBase}/api/operadores`, {
+      credentials: 'include',
+    })
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
@@ -261,9 +319,14 @@ export default function App() {
     } catch {
       // Ignore
     }
+
+    if (window.location.pathname !== '/ocorrencias') {
+      window.history.pushState({}, '', '/ocorrencias');
+    }
+    setLeftPanelMode('occurrence');
   };
 
-  const handleLockTerminal = () => {
+  const handleLockTerminal = async () => {
     setIsAuthenticated(false);
     setIsOperatorModalOpen(false);
     try {
@@ -271,6 +334,18 @@ export default function App() {
     } catch {
       // Ignore
     }
+
+    const apiBase = getApiBase();
+    try {
+      await fetch(`${apiBase}/api/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // ignore
+    }
+
+    window.history.replaceState({}, '', '/login');
   };
 
   const handleSelectOperador = (op: Operador) => {
@@ -296,12 +371,12 @@ export default function App() {
   };
 
   const handleUpdatePassword = async (operadorId: string, newSenha: string, currentSenha = ''): Promise<boolean> => {
-    const host = window.location.hostname || '127.0.0.1';
-    const apiBase = `http://${host}:4000`;
+    const apiBase = getApiBase();
     try {
       const res = await fetch(`${apiBase}/api/operadores/${operadorId}/password`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ senha: newSenha, senhaAtual: currentSenha }),
       });
       if (res.ok) {
@@ -324,11 +399,11 @@ export default function App() {
     data: Omit<Ocorrencia, 'id'>
   ) => {
     // send to server; server will broadcast update via SSE
-    const host = window.location.hostname || '127.0.0.1';
-    const apiBase = `http://${host}:4000`;
+    const apiBase = getApiBase();
     fetch(`${apiBase}/api/ocorrencias`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ ...data, finalizador: activeOperador?.nome || data.finalizador }),
     })
       .then((r) => r.json())
@@ -342,9 +417,11 @@ export default function App() {
   };
 
   const handleDeleteOcorrencia = (id: number) => {
-    const host = window.location.hostname || '127.0.0.1';
-    const apiBase = `http://${host}:4000`;
-    fetch(`${apiBase}/api/ocorrencias/${id}`, { method: 'DELETE' })
+    const apiBase = getApiBase();
+    fetch(`${apiBase}/api/ocorrencias/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
       .then((r) => r.json())
       .then(() => {
         setOcorrencias((prev) => prev.filter((o) => o.id !== id));
@@ -357,11 +434,11 @@ export default function App() {
 
   const handleAddInternalAnalysis = (item: Omit<InternalAnalysisRecord, 'id'>) => {
     navigateTo('analysis');
-    const host = window.location.hostname || '127.0.0.1';
-    const apiBase = `http://${host}:4000`;
+    const apiBase = getApiBase();
     fetch(`${apiBase}/api/analises-internas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(item),
     })
       .then((response) => {
@@ -373,9 +450,11 @@ export default function App() {
   };
 
   const handleDeleteInternalAnalysis = (id: number) => {
-    const host = window.location.hostname || '127.0.0.1';
-    const apiBase = `http://${host}:4000`;
-    fetch(`${apiBase}/api/analises-internas/${id}`, { method: 'DELETE' })
+    const apiBase = getApiBase();
+    fetch(`${apiBase}/api/analises-internas/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
       .then((response) => {
         if (!response.ok) throw new Error('Não foi possível excluir a análise');
         setInternalAnalyses((prev) => prev.filter((item) => item.id !== id));
@@ -393,6 +472,18 @@ export default function App() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_OCORRENCIAS));
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <LoginScreen
+        operadores={operadores}
+        activeOperador={activeOperador}
+        onLoginSuccess={handleLoginSuccess}
+        onRegisterOperador={handleAddOperador}
+        onUpdatePassword={handleUpdatePassword}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
@@ -500,17 +591,6 @@ export default function App() {
           </span>
         </div>
       </footer>
-
-      {/* Login Screen / Lock Screen if not authenticated */}
-      {!isAuthenticated && (
-        <LoginScreen
-          operadores={operadores}
-          activeOperador={activeOperador}
-          onLoginSuccess={handleLoginSuccess}
-          onRegisterOperador={handleAddOperador}
-          onUpdatePassword={handleUpdatePassword}
-        />
-      )}
 
       {/* Operator Switcher & Management Modal */}
       <OperatorModal
