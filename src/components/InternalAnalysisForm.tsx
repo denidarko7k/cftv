@@ -67,17 +67,33 @@ export const InternalAnalysisForm: React.FC<InternalAnalysisFormProps> = ({ onSu
     setSuggestions((current) => ({ ...current, [field]: current[field].filter((item) => item !== suggestion) }));
   };
 
+  const loadImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    setImagesLoading((current) => current + 1);
+    const reader = new FileReader();
+    reader.onload = () => setFormData((current) => ({ ...current, imagens: [...(current.imagens || []), String(reader.result)] }));
+    reader.onloadend = () => setImagesLoading((current) => Math.max(0, current - 1));
+    reader.readAsDataURL(file);
+  };
+
   const handleImages = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []) as File[];
     const imageFiles = files.filter((file) => file.type.startsWith('image/'));
-    setImagesLoading((current) => current + imageFiles.length);
-    imageFiles.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => setFormData((current) => ({ ...current, imagens: [...(current.imagens || []), String(reader.result)] }));
-      reader.onloadend = () => setImagesLoading((current) => Math.max(0, current - 1));
-      reader.readAsDataURL(file);
-    });
+    imageFiles.forEach((file) => loadImageFile(file));
     event.target.value = '';
+  };
+
+  const handlePasteImages = (event: React.ClipboardEvent<HTMLLabelElement>) => {
+    const pastedFiles = Array.from(event.clipboardData?.items || []) as DataTransferItem[];
+    const imageFiles = pastedFiles
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+
+    if (imageFiles.length === 0) return;
+
+    event.preventDefault();
+    imageFiles.forEach((file) => loadImageFile(file));
   };
 
   const removeImage = (index: number) => update('imagens', (formData.imagens || []).filter((_, imageIndex) => imageIndex !== index));
@@ -142,7 +158,7 @@ export const InternalAnalysisForm: React.FC<InternalAnalysisFormProps> = ({ onSu
         })}
         <div><label className={labelClass}>Evidência</label><div className="relative"><FileText className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input className={`${inputClass} pl-9`} value={evidenceText} onChange={(e) => setEvidenceText(e.target.value)} placeholder="Descreva a evidência encontrada" /></div></div>
         <div><label className={labelClass}>Link fixo do OneDrive</label><div className="relative"><LinkIcon className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input type="url" className={`${inputClass} pl-9`} value={formData.onedriveLink} onChange={(e) => update('onedriveLink', e.target.value)} placeholder="https://..." /></div><p className="mt-1 text-[11px] text-slate-500">Esse link ficará salvo e aparecerá nos detalhes da análise.</p></div>
-        <div><label className={labelClass}>Imagens da análise</label><label className="flex cursor-pointer items-center justify-center gap-2 rounded border border-dashed border-slate-300 bg-white px-3 py-3 text-xs font-semibold text-slate-600 hover:border-blue-400 hover:bg-blue-50"><ImagePlus className="h-4 w-4" /> {imagesLoading > 0 ? 'Carregando imagens...' : 'Adicionar imagens'}<input type="file" accept="image/*" multiple className="hidden" onChange={handleImages} disabled={imagesLoading > 0} /></label>{(formData.imagens || []).length > 0 && <div className="mt-2 grid grid-cols-3 gap-2">{formData.imagens?.map((image, index) => <div key={`${image.slice(0, 20)}-${index}`} className="relative"><img src={image} alt={`Evidência ${index + 1}`} className="h-20 w-full rounded border border-slate-200 object-cover" /><button type="button" onClick={() => removeImage(index)} className="absolute right-1 top-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">X</button></div>)}</div>}</div>
+        <div><label className={labelClass}>Imagens da análise</label><label tabIndex={0} onPaste={handlePasteImages} title="Clique aqui e pressione Ctrl+V para colar uma imagem" className="flex cursor-pointer items-center justify-center gap-2 rounded border border-dashed border-slate-300 bg-white px-3 py-3 text-xs font-semibold text-slate-600 hover:border-blue-400 hover:bg-blue-50 focus:border-blue-400 focus:bg-blue-50 focus:outline-none"><ImagePlus className="h-4 w-4" /> {imagesLoading > 0 ? 'Carregando imagens...' : 'Adicionar imagens'}<input type="file" accept="image/*" multiple className="hidden" onChange={handleImages} disabled={imagesLoading > 0} /></label><p className="mt-1 text-[11px] text-slate-500">Você pode clicar aqui e pressionar Ctrl+V para colar imagens diretamente.</p>{(formData.imagens || []).length > 0 && <div className="mt-2 grid grid-cols-3 gap-2">{formData.imagens?.map((image, index) => <div key={`${image.slice(0, 20)}-${index}`} className="relative"><img src={image} alt={`Evidência ${index + 1}`} className="h-20 w-full rounded border border-slate-200 object-cover" /><button type="button" onClick={() => removeImage(index)} className="absolute right-1 top-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">X</button></div>)}</div>}</div>
         {validationError && <p role="alert" className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{validationError}</p>}
         <div className="flex justify-end gap-2 border-t border-slate-200 pt-2"><button type="button" onClick={onClose} className="rounded border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-100">Cancelar</button><button type="button" onClick={save} disabled={imagesLoading > 0} className="rounded bg-[#003366] px-4 py-2 text-[11px] font-bold text-white hover:bg-[#002244] disabled:cursor-not-allowed disabled:opacity-50">{imagesLoading > 0 ? 'Aguarde...' : 'Salvar análise'}</button></div>
       </div>
