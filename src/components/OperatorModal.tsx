@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Operador } from '../types';
+import abilityImage from '../assets/images/Ability_2_black.png';
 import {
   X,
   BadgeCheck,
@@ -100,16 +101,16 @@ export const OperatorModal: React.FC<OperatorModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
       <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden flex flex-col">
         {/* Modal Header */}
-        <div className="bg-[#003366] text-white px-6 py-4 flex items-center justify-between border-b-4 border-[#cc0000]">
+        <div className="flex items-center justify-between border-b-2 border-[#24fbff] bg-white px-6 py-4 text-black">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center border border-white/20">
-              <UserCheck className="w-5 h-5 text-blue-200" />
+            <div className="flex h-10 w-10 items-center justify-center bg-white p-1">
+              <img src={abilityImage} alt="Ability" className="h-full w-full object-contain" />
             </div>
             <div>
-              <h2 className="font-bold text-sm tracking-wide text-white">
+              <h2 className="font-bold text-sm tracking-wide text-black">
                 Operador Autenticado
               </h2>
-              <p className="text-[11px] text-blue-200">
+              <p className="text-[11px] text-slate-500">
                 Grupo JB • Central de Monitoramento CFTV
               </p>
             </div>
@@ -117,7 +118,7 @@ export const OperatorModal: React.FC<OperatorModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer"
+            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-black"
           >
             <X className="w-5 h-5" />
           </button>
@@ -128,7 +129,7 @@ export const OperatorModal: React.FC<OperatorModalProps> = ({
           {/* Active Operator Card */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-full bg-[#003366] text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0">
+              <div className="w-12 h-12 rounded-full border border-[#003366] bg-white text-[#003366] flex items-center justify-center font-bold text-base shadow-sm shrink-0">
                 {activeOperador.nome.substring(0, 2).toUpperCase()}
               </div>
               <div>
@@ -160,7 +161,7 @@ export const OperatorModal: React.FC<OperatorModalProps> = ({
           {/* Redefinir Senha Section */}
           <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-3">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <KeyRound className="w-4 h-4 text-[#003366]" />
+                  <KeyRound className="w-4 h-4 text-[#003366]" />
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                 Redefinir Senha
               </h4>

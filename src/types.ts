@@ -40,6 +40,7 @@ export interface Ocorrencia {
   finalizador: string;
   midia?: string;
   dataHora: string; // ISO string or formatted string
+  dataRegistro?: string;
 }
 
 export interface InternalAnalysisRecord {
@@ -67,6 +68,7 @@ export interface FormStepData {
   tipo: TipoOcorrencia | '';
   loja: string;
   data: string;
+  dataRegistro: string;
   horario: string;
   descricao: string;
   solicitante_tipo: SolicitanteTipo | '';

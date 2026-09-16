@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Operador } from '../types';
+import ultimateImage from '../assets/images/Ultimate_black.png';
 import {
   ShieldCheck,
   Lock,
@@ -7,9 +8,7 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  KeyRound,
   ArrowRight,
-  ShieldAlert,
   CheckCircle2,
   LockKeyhole
 } from 'lucide-react';
@@ -188,32 +187,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-white p-4 sm:p-6">
+    <div className="min-h-screen w-full flex items-center justify-center bg-[#b9b9b9] p-4 sm:p-6">
       <div className="bg-white rounded-2xl shadow-[0_24px_80px_rgba(15,23,42,0.12)] border border-slate-200 max-w-md w-full overflow-hidden flex flex-col">
         {/* Brand Header */}
-        <div className="bg-[#003366] text-white p-6 border-b-4 border-[#cc0000] relative">
-          <div className="flex items-center gap-3.5">
-            <div className="h-12 w-12 bg-white rounded-lg p-1 shadow-md shrink-0 flex items-center justify-center overflow-hidden border border-white/20">
-              <img
-                src="/assets/aistudio/logo-grupo-jb.png"
-                alt="Grupo JB"
-                className="w-full h-full object-contain"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold tracking-widest text-blue-200 block">
-                Central de Monitoramento CFTV
-              </span>
-              <h2 className="text-base font-bold tracking-tight text-white">
-                SISTEMA GRUPO JB
-              </h2>
-              <div className="flex items-center gap-1.5 text-xs text-blue-100 mt-0.5 font-medium">
-                <Lock className="w-3.5 h-3.5 text-blue-300" />
-                <span>Autenticação de Acesso</span>
-              </div>
-            </div>
-          </div>
+        <div className="flex justify-center bg-white px-6 pb-5 pt-6">
+          <img
+            src={ultimateImage}
+            alt="Ultimate"
+            className="h-[4.5rem] w-auto max-w-full object-contain"
+          />
         </div>
 
         {/* Content Body */}
@@ -289,17 +271,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
               <button
                 type="submit"
-                className="w-full py-2.5 px-4 bg-[#003366] hover:bg-[#002244] text-white font-bold text-sm rounded-lg shadow transition flex items-center justify-center gap-2 cursor-pointer mt-2"
+                className="w-full py-2.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-sm rounded-lg shadow transition flex items-center justify-center cursor-pointer mt-2"
               >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Entrar no Sistema</span>
+                <span>Entrar</span>
               </button>
-
-              <div className="pt-2 text-center">
-                <p className="text-[11px] text-slate-500">
-                  Primeiro acesso? Utilize a senha temporária padrão <code className="font-mono font-bold bg-slate-100 text-[#003366] px-1.5 py-0.5 rounded border border-slate-200">{DEFAULT_PASSWORD}</code>
-                </p>
-              </div>
             </form>
           )}
 
@@ -409,12 +384,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         </div>
 
         {/* Security Footer Note */}
-        <div className="bg-slate-100 px-6 py-2.5 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
-          <span className="flex items-center gap-1">
-            <ShieldAlert className="w-3.5 h-3.5 text-slate-400" />
-            Central CFTV • Grupo JB
-          </span>
-          <span className="font-mono text-slate-400 text-[10px]">TERMINAL SEGURO</span>
+        <div className="bg-slate-100 px-6 py-2.5 border-t border-slate-200 text-center text-[11px] text-slate-500">
+          <span>Central CFTV • Grupo JB</span>
         </div>
       </div>
     </div>

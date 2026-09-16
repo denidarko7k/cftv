@@ -15,13 +15,17 @@ import {
   Calendar,
   Clock,
   Lock,
-  ShieldCheck
+  LogOut
 } from 'lucide-react';
 import { FormStepData, Ocorrencia, SituacaoOcorrencia, SolicitanteTipo, TipoOcorrencia, Operador, LOJAS_GRUPO } from '../types';
+import { DatePickerField, TimePickerField } from './InternalAnalysisForm';
+import grenadeImage from '../assets/images/Grenade_black.png';
 
 interface OccurrenceFormProps {
   onSubmit: (ocorrencia: Omit<Ocorrencia, 'id'>) => void;
   activeOperador?: Operador;
+  initialOccurrence?: Ocorrencia;
+  onClose?: () => void;
 }
 
 const getTodayDate = () => {
@@ -39,10 +43,21 @@ const getCurrentTime = () => {
   return `${hours}:${minutes}`;
 };
 
+const formatCurrencyInput = (value: string) => {
+  const amount = Number(value) || 0;
+  return amount ? amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+};
+
+const parseCurrencyInput = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  return digits ? String(Number(digits) / 100) : '';
+};
+
 const INITIAL_FORM: FormStepData = {
   tipo: '',
   loja: '',
   data: getTodayDate(),
+  dataRegistro: getTodayDate(),
   horario: getCurrentTime(),
   descricao: '',
   solicitante_tipo: '',
@@ -53,12 +68,31 @@ const INITIAL_FORM: FormStepData = {
   midia: '',
 };
 
-export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, activeOperador }) => {
-  const [currentStep, setCurrentStep] = useState<number>(1);
-  const [formData, setFormData] = useState<FormStepData>(() => ({
+const occurrenceToForm = (occurrence: Ocorrencia, operatorName: string): FormStepData => {
+  const date = new Date(occurrence.dataHora);
+  const validDate = !Number.isNaN(date.getTime());
+  return {
     ...INITIAL_FORM,
-    finalizador: activeOperador?.nome || '',
-  }));
+    tipo: occurrence.tipo,
+    loja: occurrence.loja,
+    data: validDate ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : getTodayDate(),
+    dataRegistro: occurrence.dataRegistro || getTodayDate(),
+    horario: validDate ? `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}` : getCurrentTime(),
+    descricao: occurrence.descricao,
+    solicitante_tipo: occurrence.solicitante_tipo,
+    solicitante_nome: occurrence.solicitante_nome,
+    situacao: occurrence.situacao,
+    items: occurrence.produto ? [{ produto: occurrence.produto, quantidade: '1', valor: String(occurrence.valor || '') }] : [],
+    finalizador: operatorName || occurrence.finalizador,
+    midia: occurrence.midia || '',
+  };
+};
+
+export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, activeOperador, initialOccurrence, onClose }) => {
+  const [currentStep, setCurrentStep] = useState<number>(1);
+  const [formData, setFormData] = useState<FormStepData>(() => initialOccurrence
+    ? occurrenceToForm(initialOccurrence, activeOperador?.nome || '')
+    : { ...INITIAL_FORM, finalizador: activeOperador?.nome || '' });
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
@@ -113,6 +147,30 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
         setErrorMessage('Por favor, forneça uma descrição breve do ocorrido.');
         return false;
       }
+      if (!formData.solicitante_tipo) {
+        setErrorMessage('Por favor, selecione quem solicitou a verificação.');
+        return false;
+      }
+      if (!formData.solicitante_nome.trim()) {
+        setErrorMessage('Por favor, informe o nome do solicitante.');
+        return false;
+      }
+      if (!formData.situacao) {
+        setErrorMessage('Por favor, escolha a situação da ocorrência.');
+        return false;
+      }
+      if (formData.situacao === 'Roubo Confirmado') {
+        const items = formData.items || [];
+        if (items.length === 0) {
+          setErrorMessage('Para roubo confirmado, adicione pelo menos um item furtado.');
+          return false;
+        }
+        const total = items.reduce((acc, it) => acc + (Number(it.valor) || 0) * (Number(it.quantidade) || 1), 0);
+        if (total <= 0) {
+          setErrorMessage('Para roubo confirmado, informe o valor aproximado do prejuízo para os itens.');
+          return false;
+        }
+      }
     } else if (step === 2) {
       if (!formData.solicitante_tipo) {
         setErrorMessage('Por favor, selecione quem solicitou a verificação.');
@@ -121,6 +179,22 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
       if (!formData.solicitante_nome.trim()) {
         setErrorMessage('Por favor, informe o nome do solicitante.');
         return false;
+      }
+      if (!formData.situacao) {
+        setErrorMessage('Por favor, escolha a situação da ocorrência.');
+        return false;
+      }
+      if (formData.situacao === 'Roubo Confirmado') {
+        const items = formData.items || [];
+        if (items.length === 0) {
+          setErrorMessage('Para roubo confirmado, adicione pelo menos um item furtado.');
+          return false;
+        }
+        const total = items.reduce((acc, it) => acc + (Number(it.valor) || 0) * (Number(it.quantidade) || 1), 0);
+        if (total <= 0) {
+          setErrorMessage('Para roubo confirmado, informe o valor aproximado do prejuízo para os itens.');
+          return false;
+        }
       }
     } else if (step === 3) {
       if (!formData.situacao) {
@@ -186,16 +260,15 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
       finalizador: fixedResponsible,
       midia: formData.midia.trim() || undefined,
       dataHora: combinedDataHora,
+      dataRegistro: getTodayDate(),
     });
 
     // Reset to step 1
-    setFormData({
-      ...INITIAL_FORM,
-      data: getTodayDate(),
-      horario: getCurrentTime(),
-      finalizador: activeOperador?.nome || '',
-    });
+    if (!initialOccurrence) {
+      setFormData({ ...INITIAL_FORM, data: getTodayDate(), horario: getCurrentTime(), finalizador: activeOperador?.nome || '' });
+    }
     setCurrentStep(1);
+    if (initialOccurrence) onClose?.();
     setSuccessNotice('Ocorrência registrada com sucesso no sistema!');
     setTimeout(() => {
       setSuccessNotice(null);
@@ -204,9 +277,7 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
 
   const stepTitles = [
     { num: 1, title: 'Ocorrência', icon: FileText },
-    { num: 2, title: 'Solicitante', icon: UserCheck },
-    { num: 3, title: 'Situação', icon: AlertTriangle },
-    { num: 4, title: 'Finalização', icon: CheckCircle2 },
+    { num: 2, title: 'Finalização', icon: CheckCircle2 },
   ];
 
   const currentOperatorName = activeOperador?.nome || formData.finalizador || 'Operador CFTV';
@@ -216,13 +287,8 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
       {/* Form Card with Professional Polish styling */}
       <div className="bg-white rounded shadow-xs border border-slate-200 overflow-hidden flex flex-col">
         {/* Card Header matching Design HTML: bg-slate-100 px-4 py-3 border-b border-slate-200 */}
-        <div className="bg-slate-100 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
-          <h2 className="font-bold text-slate-700 uppercase text-xs tracking-wider">
-            Nova Ocorrência
-          </h2>
-          <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded uppercase">
-            ETAPA {currentStep} DE 4
-          </span>
+        <div className="relative flex justify-center bg-white px-4 py-4">
+          <img src={grenadeImage} alt="Ocorrência" className="h-16 w-16 object-contain" />
         </div>
 
         {/* Card Body matching Design HTML: p-5 space-y-4 */}
@@ -230,26 +296,24 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
           {/* Step Progress Pill Bars */}
           <div className="flex justify-between items-center mb-1">
             <div className="flex gap-1.5">
-              {[1, 2, 3, 4].map((stepNum) => (
+              {[1, 2].map((stepNum) => (
                 <button
                   key={stepNum}
                   type="button"
                   onClick={() => {
                     if (stepNum < currentStep) {
                       prevStep(stepNum);
-                    } else if (stepNum === currentStep + 1 && validateStep(currentStep)) {
-                      nextStep(stepNum);
+                    } else if (stepNum === 2 && currentStep === 1 && validateStep(1)) {
+                      nextStep(4);
                     }
                   }}
-                  className={`w-8 h-1.5 rounded-full transition-all cursor-pointer ${
-                    currentStep >= stepNum ? 'bg-[#003366]' : 'bg-slate-200'
-                  }`}
+                  className="h-1.5 w-8 cursor-pointer rounded-full bg-black transition-all"
                   title={`Ir para etapa ${stepNum}`}
                 />
               ))}
             </div>
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              {stepTitles[currentStep - 1].title}
+              {stepTitles[currentStep === 4 ? 1 : currentStep - 1].title}
             </span>
           </div>
 
@@ -290,6 +354,7 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                     <option value="Consumo em loja/furto">Consumo em loja / Furto</option>
                     <option value="Furto PDVs">Furto PDVs</option>
                     <option value="Tentativa de furto PDVs">Tentativa de furto PDVs</option>
+                    <option value="Outros">Outros</option>
                   </select>
                 </div>
 
@@ -321,36 +386,6 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                     ))}
                   </select>
 
-                  {/* Quick selection buttons from 01 to 16 */}
-                  <div className="pt-0.5">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-                      Seleção Rápida:
-                    </span>
-                    <div className="grid grid-cols-8 sm:grid-cols-8 gap-1">
-                      {LOJAS_GRUPO.map((loja, idx) => {
-                        const num = String(idx + 1).padStart(2, '0');
-                        const isSelected = formData.loja === loja;
-                        return (
-                          <button
-                            key={loja}
-                            type="button"
-                            onClick={() => {
-                              setFormData((prev) => ({ ...prev, loja }));
-                              setErrorMessage('');
-                            }}
-                            className={`py-1 text-center text-[11px] font-mono font-bold rounded border transition cursor-pointer ${
-                              isSelected
-                                ? 'bg-[#003366] border-[#003366] text-white shadow-xs'
-                                : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300'
-                            }`}
-                            title={loja}
-                          >
-                            {num}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
                 </div>
 
                 {/* Data e Horário da Ocorrência */}
@@ -361,14 +396,7 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                       <span>Data</span>
                       <span className="text-red-600">*</span>
                     </label>
-                    <input
-                      type="date"
-                      className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      name="data"
-                      value={formData.data}
-                      onChange={handleChange}
-                      required
-                    />
+                    <DatePickerField value={formData.data} maxDate={getTodayDate()} onChange={(value) => setFormData((prev) => ({ ...prev, data: value }))} />
                   </div>
 
                   <div className="space-y-1">
@@ -387,14 +415,7 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                         Definir Agora
                       </button>
                     </div>
-                    <input
-                      type="time"
-                      className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      name="horario"
-                      value={formData.horario}
-                      onChange={handleChange}
-                      required
-                    />
+                    <TimePickerField value={formData.horario} onChange={(value) => setFormData((prev) => ({ ...prev, horario: value }))} />
                   </div>
                 </div>
 
@@ -416,22 +437,7 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                   </p>
                 </div>
 
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    className="w-full bg-[#003366] text-white py-3 rounded font-bold text-sm hover:bg-[#002244] flex items-center justify-center gap-2 cursor-pointer transition uppercase tracking-wider"
-                    onClick={() => nextStep(2)}
-                  >
-                    <span>PRÓXIMA ETAPA</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ETAPA 2 */}
-            {currentStep === 2 && (
-              <div className="space-y-4">
+            {/* SOLICITANTE E SITUAÇÃO */}
                 <div className="space-y-1">
                   <label className="block text-[11px] font-bold text-slate-500 uppercase">
                     Origem da Notificação <span className="text-red-600">*</span>
@@ -483,30 +489,6 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                   )}
                 </div>
 
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="button"
-                    className="w-1/3 border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 py-3 rounded font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition"
-                    onClick={() => prevStep(1)}
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    <span>Voltar</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="w-2/3 bg-[#003366] text-white py-3 rounded font-bold text-xs uppercase tracking-wider hover:bg-[#002244] flex items-center justify-center gap-2 cursor-pointer transition"
-                    onClick={() => nextStep(3)}
-                  >
-                    <span>PRÓXIMA ETAPA</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ETAPA 3 */}
-            {currentStep === 3 && (
-              <div className="space-y-4">
                 <div className="space-y-1">
                   <label className="block text-[11px] font-bold text-slate-500 uppercase">
                     Desfecho da Ação <span className="text-red-600">*</span>
@@ -636,13 +618,12 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                                 <div className="relative">
                                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 text-sm font-semibold">R$</span>
                                   <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
+                                    type="text"
+                                    inputMode="numeric"
                                     className="w-full pl-9 pr-2 py-2 border border-slate-200 rounded text-sm"
-                                    value={it.valor}
+                                    value={formatCurrencyInput(it.valor)}
                                     onChange={(e) => {
-                                      const val = e.target.value;
+                                      const val = parseCurrencyInput(e.target.value);
                                       setFormData((prev) => {
                                         const items = [...(prev.items || [])];
                                         items[idx] = { ...items[idx], valor: val };
@@ -724,14 +705,13 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                           R$
                         </span>
                         <input
-                          type="number"
-                          step="0.01"
-                          min="0"
+                          type="text"
+                          inputMode="numeric"
                           className="w-full pl-9 pr-3 py-2 border border-green-300 rounded text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-green-500/20"
-                          placeholder="Ex: 85.00"
-                          value={(formData.items && formData.items[0] && formData.items[0].valor) || ''}
+                          placeholder="Ex: 85,00"
+                          value={formatCurrencyInput((formData.items && formData.items[0] && formData.items[0].valor) || '')}
                           onChange={(e) => {
-                            const val = e.target.value;
+                            const val = parseCurrencyInput(e.target.value);
                             setFormData((prev) => {
                               const items = [...(prev.items || [])];
                               if (!items[0]) items[0] = { produto: '', quantidade: '1', valor: '' };
@@ -748,18 +728,18 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                 <div className="flex gap-2 pt-2">
                   <button
                     type="button"
-                    className="w-1/3 border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 py-3 rounded font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition"
-                    onClick={() => prevStep(2)}
+                    className="w-1/3 rounded bg-slate-100 py-3 text-xs font-bold tracking-wider text-red-600 transition hover:bg-red-600 hover:text-white flex items-center justify-center gap-1.5 cursor-pointer"
+                    onClick={onClose}
                   >
-                    <ArrowLeft className="w-4 h-4" />
-                    <span>Voltar</span>
+                    <LogOut className="h-4 w-4 scale-x-[-1]" />
+                    <span>Cancelar</span>
                   </button>
                   <button
                     type="button"
-                    className="w-2/3 bg-[#003366] text-white py-3 rounded font-bold text-xs uppercase tracking-wider hover:bg-[#002244] flex items-center justify-center gap-2 cursor-pointer transition"
+                    className="w-2/3 rounded bg-slate-200 py-3 text-xs font-bold tracking-wider text-black transition hover:bg-slate-700 hover:text-white flex items-center justify-center gap-2 cursor-pointer"
                     onClick={() => nextStep(4)}
                   >
-                    <span>PRÓXIMA ETAPA</span>
+                    <span>Avançar</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -772,10 +752,7 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                 {/* Responsável Fixo pelo Registro */}
                 <div className="space-y-1.5">
                   <label className="block text-[11px] font-bold text-slate-500 uppercase flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-slate-700">
-                      <Lock className="w-3.5 h-3.5 text-[#003366]" />
-                      Responsável pela Ocorrência
-                    </span>
+                    <span className="text-slate-700">Operador</span>
                     <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                       FIXO (OPERADOR LOGADO)
                     </span>
@@ -791,9 +768,8 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                           Operador em Serviço
                         </span>
-                        <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                        <h4 className="text-sm font-bold text-slate-900">
                           {currentOperatorName}
-                          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                         </h4>
                       </div>
                     </div>
@@ -851,6 +827,10 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                     </span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-slate-500">Data do registro:</span>
+                    <span className="font-semibold text-slate-800">{formData.dataRegistro.split('-').reverse().join('/')}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-slate-500">Solicitante:</span>
                     <span className="font-semibold text-slate-800">
                       {formData.solicitante_nome} ({formData.solicitante_tipo})
@@ -893,15 +873,15 @@ export const OccurrenceForm: React.FC<OccurrenceFormProps> = ({ onSubmit, active
                 <div className="flex gap-2 pt-2">
                   <button
                     type="button"
-                    className="w-1/3 border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 py-3 rounded font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition"
-                    onClick={() => prevStep(3)}
+                    className="w-1/3 rounded bg-slate-100 py-3 text-xs font-bold tracking-wider text-red-600 transition hover:bg-red-600 hover:text-white hover:fill-white flex items-center justify-center gap-1.5 cursor-pointer"
+                    onClick={() => prevStep(2)}
                   >
                     <ArrowLeft className="w-4 h-4" />
                     <span>Voltar</span>
                   </button>
                   <button
                     type="submit"
-                    className="w-2/3 bg-[#cc0000] hover:bg-[#a80000] text-white py-3 rounded font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition shadow-sm"
+                    className="w-2/3 rounded bg-slate-200 py-3 text-xs font-bold tracking-wider text-black transition hover:bg-slate-700 hover:text-white hover:fill-white flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>FINALIZAR OCORRÊNCIA</span>

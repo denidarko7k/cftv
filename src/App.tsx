@@ -10,7 +10,7 @@ import { OperatorModal } from './components/OperatorModal';
 import { LoginScreen } from './components/LoginScreen';
 import { InternalAnalysisRecord, Ocorrencia, Operador } from './types';
 import { INITIAL_OCORRENCIAS } from './data/mockOcorrencias';
-import { Shield, RotateCcw, Lock, LogOut } from 'lucide-react';
+import { ClipboardList, FileSearch, RotateCcw, X } from 'lucide-react';
 
 const STORAGE_KEY = 'cftv_ocorrencias_v2';
 const OPERATORS_KEY = 'cftv_operadores_v2';
@@ -120,6 +120,7 @@ export default function App() {
   const [isOperatorModalOpen, setIsOperatorModalOpen] = useState(false);
   const [selectedOcorrencia, setSelectedOcorrencia] = useState<Ocorrencia | null>(null);
   const [selectedInternalAnalysis, setSelectedInternalAnalysis] = useState<InternalAnalysisRecord | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const [leftPanelMode, setLeftPanelMode] = useState<'occurrence' | 'analysis'>(() => (
     window.location.pathname === '/analise-interna' ? 'analysis' : 'occurrence'
@@ -432,6 +433,21 @@ export default function App() {
       });
   };
 
+  const handleUpdateOcorrencia = (id: number, data: Omit<Ocorrencia, 'id'>) => {
+    const apiBase = getApiBase();
+    fetch(`${apiBase}/api/ocorrencias/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    })
+      .then((response) => response.json())
+      .then((updated) => {
+        setOcorrencias((prev) => prev.map((item) => item.id === id ? updated : item));
+        setSelectedOcorrencia(updated);
+      });
+  };
+
   const handleAddInternalAnalysis = (item: Omit<InternalAnalysisRecord, 'id'>) => {
     navigateTo('analysis');
     const apiBase = getApiBase();
@@ -462,6 +478,21 @@ export default function App() {
       .catch(() => setInternalAnalyses((prev) => prev.filter((item) => item.id !== id)));
   };
 
+  const handleUpdateInternalAnalysis = (id: number, data: Omit<InternalAnalysisRecord, 'id'>) => {
+    const apiBase = getApiBase();
+    fetch(`${apiBase}/api/analises-internas/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    })
+      .then((response) => response.json())
+      .then((updated) => {
+        setInternalAnalyses((prev) => prev.map((item) => item.id === id ? updated : item));
+        setSelectedInternalAnalysis(updated);
+      });
+  };
+
   const handleResetSampleData = () => {
     if (
       confirm(
@@ -471,6 +502,16 @@ export default function App() {
       setOcorrencias(INITIAL_OCORRENCIAS);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_OCORRENCIAS));
     }
+  };
+
+  const handleCreateOccurrence = (data: Omit<Ocorrencia, 'id'>) => {
+    handleAddOcorrencia(data);
+    setIsCreateModalOpen(false);
+  };
+
+  const handleCreateAnalysis = (data: Omit<InternalAnalysisRecord, 'id'>) => {
+    handleAddInternalAnalysis(data);
+    setIsCreateModalOpen(false);
   };
 
   if (!isAuthenticated) {
@@ -486,7 +527,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       {/* Top Brand Bar */}
       <Navbar
         totalCount={ocorrencias.length}
@@ -495,62 +536,34 @@ export default function App() {
         onLockTerminal={handleLockTerminal}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 w-full max-w-full mx-auto p-4 sm:p-6 flex flex-col lg:flex-row gap-6 items-start">
-        {/* Formulário (Esquerda) - aumentado para preencher espaço */}
-        <div className="w-full lg:w-[440px] shrink-0 flex flex-col gap-4">
-          <div className="flex bg-slate-200 p-1 rounded-md">
-            <button
-              onClick={() => navigateTo('occurrence')}
-              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-colors ${
-                leftPanelMode === 'occurrence'
-                  ? 'bg-white text-[#003366] shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Nova Ocorrência
-            </button>
-            <button
-              onClick={() => navigateTo('analysis')}
-              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-colors ${
-                leftPanelMode === 'analysis'
-                  ? 'bg-white text-[#003366] shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Análise Interna
-            </button>
+      <main className="flex flex-1 w-full min-h-0">
+        <aside className="hidden w-56 shrink-0 border-r border-slate-200 bg-white p-4 md:block">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Setores</p>
+          <div className="space-y-1">
+            <button type="button" onClick={() => navigateTo('occurrence')} className={`flex w-full items-center gap-2 rounded px-3 py-2.5 text-left text-sm font-bold ${leftPanelMode === 'occurrence' ? 'bg-slate-100 text-[#003366]' : 'text-slate-600 hover:bg-slate-50'}`}><ClipboardList className="h-4 w-4" /> Ocorrências</button>
+            <button type="button" onClick={() => navigateTo('analysis')} className={`flex w-full items-center gap-2 rounded px-3 py-2.5 text-left text-sm font-bold ${leftPanelMode === 'analysis' ? 'bg-slate-100 text-[#003366]' : 'text-slate-600 hover:bg-slate-50'}`}><FileSearch className="h-4 w-4" /> Análise interna</button>
           </div>
-
-          {leftPanelMode === 'occurrence' ? (
-            <OccurrenceForm
-              onSubmit={handleAddOcorrencia}
-              activeOperador={activeOperador}
-            />
-          ) : (
-            <InternalAnalysisForm
-              activeOperador={activeOperador?.nome || 'Operador'}
-              onSubmit={handleAddInternalAnalysis}
-              onClose={() => navigateTo('occurrence')}
-            />
-          )}
-        </div>
-
-        {/* Lista de Registros + KPIs (Direita) - maior área para registros recentes */}
-        <div className="flex-1 w-full min-w-0 lg:pl-6">
-          <div className="h-[72vh]">
-          {leftPanelMode === 'analysis' ? (
-            <InternalAnalysisList analises={internalAnalyses} onSelectAnalise={setSelectedInternalAnalysis} />
-          ) : (
-            <OccurrenceList
-              ocorrencias={ocorrencias}
-              onSelectOcorrencia={setSelectedOcorrencia}
-              onDeleteOcorrencia={handleDeleteOcorrencia}
-            />
-          )}
+        </aside>
+        <section className="min-w-0 flex-1 p-4 sm:p-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">{leftPanelMode === 'occurrence' ? 'Ocorrências' : 'Análises internas'}</h2>
+              <p className="text-xs text-slate-500">Registros organizados por data</p>
+            </div>
+            <button type="button" onClick={() => setIsCreateModalOpen(true)} className="rounded bg-slate-200 px-4 py-2 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-300">{leftPanelMode === 'occurrence' ? 'Nova Ocorrência' : 'Nova Análise'}</button>
           </div>
-        </div>
+          <div className="h-[calc(100vh-9rem)] overflow-y-auto">
+            {leftPanelMode === 'analysis' ? <InternalAnalysisList analises={internalAnalyses} onSelectAnalise={setSelectedInternalAnalysis} /> : <OccurrenceList ocorrencias={ocorrencias} onSelectOcorrencia={setSelectedOcorrencia} onDeleteOcorrencia={handleDeleteOcorrencia} />}
+          </div>
+        </section>
       </main>
+
+      {isCreateModalOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+        <div className="scrollbar-hidden relative h-[90vh] w-[60vw] min-w-[min(92vw,36rem)] max-w-5xl overflow-y-auto rounded-lg shadow-2xl">
+          <button type="button" onClick={() => setIsCreateModalOpen(false)} aria-label="Fechar formulário" className="absolute right-3 top-3 z-10 rounded bg-white/90 p-1 text-slate-500 shadow hover:text-slate-900"><X className="h-4 w-4" /></button>
+          {leftPanelMode === 'occurrence' ? <OccurrenceForm onSubmit={handleCreateOccurrence} activeOperador={activeOperador} onClose={() => setIsCreateModalOpen(false)} /> : <InternalAnalysisForm activeOperador={activeOperador?.nome || 'Operador'} onSubmit={handleCreateAnalysis} onClose={() => setIsCreateModalOpen(false)} />}
+        </div>
+      </div>}
 
       {/* Footer */}
       <footer className="h-9 bg-slate-200 flex items-center px-4 sm:px-6 justify-between text-[10px] text-slate-600 uppercase font-bold shrink-0 border-t border-slate-300">
@@ -567,15 +580,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-4 sm:gap-6">
-          <button
-            type="button"
-            onClick={handleLockTerminal}
-            className="text-slate-600 hover:text-red-700 flex items-center gap-1 transition cursor-pointer text-[10px]"
-            title="Sair do Terminal e exigir login novamente"
-          >
-            <LogOut className="w-3 h-3 text-red-600" />
-            <span>Sair</span>
-          </button>
           <button
             type="button"
             onClick={handleResetSampleData}
@@ -611,6 +615,7 @@ export default function App() {
           ocorrencia={selectedOcorrencia}
           onClose={() => setSelectedOcorrencia(null)}
           onDelete={handleDeleteOcorrencia}
+          onUpdate={handleUpdateOcorrencia}
         />
       )}
 
@@ -619,6 +624,7 @@ export default function App() {
           analise={selectedInternalAnalysis}
           onClose={() => setSelectedInternalAnalysis(null)}
           onDelete={handleDeleteInternalAnalysis}
+          onUpdate={handleUpdateInternalAnalysis}
         />
       )}
     </div>

@@ -190,6 +190,27 @@ app.delete('/api/analises-internas/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+app.patch('/api/analises-internas/:id', async (req, res) => {
+  await db.read();
+  const id = Number(req.params.id);
+  const index = db.data.analisesInternas.findIndex((row) => Number(row.id) === id);
+  if (index < 0) return res.status(404).json({ error: 'Análise não encontrada' });
+  const current = db.data.analisesInternas[index];
+  const updated = {
+    ...current,
+    ...(req.body || {}),
+    id,
+    valor: Number(req.body?.valor) || 0,
+    evidencia: Array.isArray(req.body?.evidencia) ? req.body.evidencia : current.evidencia || [],
+    imagens: Array.isArray(req.body?.imagens) ? req.body.imagens : current.imagens || [],
+    onedriveLink: String(req.body?.onedriveLink ?? current.onedriveLink ?? ''),
+  };
+  db.data.analisesInternas[index] = updated;
+  await db.write();
+  broadcastAnalises();
+  res.json(updated);
+});
+
 // Operators endpoints
 app.get('/api/operadores', async (req, res) => {
   await db.read();
@@ -340,6 +361,7 @@ app.post('/api/ocorrencias', async (req, res) => {
     finalizador: o.finalizador || '',
     midia: o.midia || null,
     dataHora: o.dataHora || new Date().toISOString(),
+    dataRegistro: o.dataRegistro || new Date().toISOString().slice(0, 10),
   };
   db.data.ocorrencias.push(newRow);
   await db.write();
@@ -357,6 +379,19 @@ app.delete('/api/ocorrencias/:id', async (req, res) => {
   broadcastOcorrencias();
   if (before === after) return res.status(404).json({ error: 'Not found' });
   res.json({ success: true });
+});
+
+app.patch('/api/ocorrencias/:id', async (req, res) => {
+  await db.read();
+  const id = Number(req.params.id);
+  const index = db.data.ocorrencias.findIndex((row) => Number(row.id) === id);
+  if (index < 0) return res.status(404).json({ error: 'Ocorrência não encontrada' });
+  const updated = { ...db.data.ocorrencias[index], ...(req.body || {}), id };
+  if (updated.valor != null) updated.valor = Number(updated.valor) || 0;
+  db.data.ocorrencias[index] = updated;
+  await db.write();
+  broadcastOcorrencias();
+  res.json(updated);
 });
 
 app.listen(PORT, '0.0.0.0', () => {

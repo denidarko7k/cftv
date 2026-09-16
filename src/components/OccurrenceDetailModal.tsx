@@ -15,24 +15,37 @@ import {
   Check,
   Store,
   ShieldCheck
+  ,Pencil
 } from 'lucide-react';
 import { Ocorrencia } from '../types';
 import { formatCurrency, formatDateTime } from '../utils/formatters';
+import { OccurrenceForm } from './OccurrenceForm';
 
 interface OccurrenceDetailModalProps {
   ocorrencia: Ocorrencia | null;
   onClose: () => void;
   onDelete?: (id: number) => void;
+  onUpdate?: (id: number, item: Omit<Ocorrencia, 'id'>) => void;
 }
 
 export const OccurrenceDetailModal: React.FC<OccurrenceDetailModalProps> = ({
   ocorrencia,
   onClose,
   onDelete,
+  onUpdate,
 }) => {
   const [copied, setCopied] = React.useState(false);
+  const [isEditing, setIsEditing] = React.useState(false);
 
   if (!ocorrencia) return null;
+
+  if (isEditing) {
+    return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 p-4" onClick={onClose}>
+      <div className="mx-auto max-w-2xl" onClick={(event) => event.stopPropagation()}>
+        <OccurrenceForm initialOccurrence={ocorrencia} onClose={() => setIsEditing(false)} onSubmit={(item) => { onUpdate?.(ocorrencia.id, item); setIsEditing(false); }} />
+      </div>
+    </div>;
+  }
 
   const handleCopy = () => {
     const text = `OCORRÊNCIA CFTV #${String(ocorrencia.id).padStart(2, '0')}
@@ -252,6 +265,10 @@ Descrição: ${ocorrencia.descricao}`;
               <span className="font-medium">Data e Horário:</span>
               <span className="font-mono font-semibold text-slate-800">{formatDateTime(ocorrencia.dataHora)}</span>
             </div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Data do registro:</span>
+              <span className="font-semibold text-slate-500">{ocorrencia.dataRegistro || 'Não preenchido'}</span>
+            </div>
             {ocorrencia.loja && (
               <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
                 <Store className="w-3.5 h-3.5 text-slate-500" />
@@ -264,6 +281,14 @@ Descrição: ${ocorrencia.descricao}`;
         {/* Modal Footer */}
         <div className="bg-slate-100 px-6 py-3.5 border-t border-slate-200 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50 transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>Editar</span>
+            </button>
             <button
               type="button"
               onClick={handleCopy}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Download, Store, MoreVertical } from 'lucide-react';
+import { Search, Store, MoreVertical } from 'lucide-react';
 import { InternalAnalysisRecord, LOJAS_GRUPO } from '../types';
 
 interface InternalAnalysisListProps {
@@ -18,17 +18,17 @@ export const InternalAnalysisList: React.FC<InternalAnalysisListProps> = ({ anal
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // KPI computations
-  const total = analises.length;
-  const suspeitos = analises.filter((a) => a.parecer === 'Suspeito' || a.parecer === 'Pendente').length;
-  const procIncorretos = analises.filter((a) => a.procedimentoIncorreto && a.procedimentoIncorreto.trim() !== '').length;
-  const valorAnalisado = analises.reduce((acc, a) => acc + (Number(a.valor) || 0), 0);
-  const valorEmRisco = analises
-    .filter((a) => a.status !== 'Concluido')
-    .reduce((acc, a) => acc + (Number(a.valor) || 0), 0);
-
   // Filtering
-  const filtered = analises.filter((a) => {
+  const sortableDate = (value: string) => {
+    const legacy = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    return legacy ? `${legacy[3]}-${legacy[2]}-${legacy[1]}` : value;
+  };
+  const sortedAnalises = [...analises].sort((first, second) => {
+    const firstDate = sortableDate(first.dataAnalise || first.dataOperacao || '');
+    const secondDate = sortableDate(second.dataAnalise || second.dataOperacao || '');
+    return secondDate.localeCompare(firstDate);
+  });
+  const filtered = sortedAnalises.filter((a) => {
     const matchLoja = filterLoja === 'Todas' || a.loja === filterLoja;
     const matchTipo = filterTipo === 'Todos' || a.tipo === filterTipo;
     const matchParecer = filterParecer === 'Todos' || a.parecer === filterParecer;
@@ -62,30 +62,6 @@ export const InternalAnalysisList: React.FC<InternalAnalysisListProps> = ({ anal
 
   return (
     <div className="flex flex-col gap-4">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Total</p>
-          <p className="text-2xl font-bold text-slate-800">{total}</p>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Suspeitos</p>
-          <p className="text-2xl font-bold text-orange-600">{suspeitos}</p>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Proc. Incorretos</p>
-          <p className="text-2xl font-bold text-red-600">{procIncorretos}</p>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Valor Analisado</p>
-          <p className="text-base font-bold text-slate-800">{formatCurrency(valorAnalisado)}</p>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Valor em Risco</p>
-          <p className="text-base font-bold text-red-600">{formatCurrency(valorEmRisco)}</p>
-        </div>
-      </div>
-
       {/* Table Card */}
       <div className="bg-white border border-slate-200 rounded-lg shadow-xs overflow-hidden flex flex-col">
         {/* Toolbar */}
@@ -124,15 +100,6 @@ export const InternalAnalysisList: React.FC<InternalAnalysisListProps> = ({ anal
             <option value="Todos">Parecer</option>
             {pareceres.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <div className="ml-auto">
-            <button
-              type="button"
-              className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 border border-slate-300 rounded px-2.5 py-1.5 bg-white hover:bg-slate-100 transition cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Exportar CSV
-            </button>
-          </div>
         </div>
 
         {/* Table */}

@@ -1,17 +1,25 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Calendar, Clock, DollarSign, FileText, ImagePlus, Link as LinkIcon, Plus, Settings2, Store, User, X } from 'lucide-react';
 import { InternalAnalysisRecord, LOJAS_GRUPO } from '../types';
+import abilityImage from '../assets/images/Ability_2_black.png';
 
 interface InternalAnalysisFormProps {
   onSubmit: (item: Omit<InternalAnalysisRecord, 'id'>) => void;
   onClose: () => void;
   activeOperador: string;
+  initialData?: InternalAnalysisRecord;
 }
 
 type AnalysisFormData = Omit<InternalAnalysisRecord, 'id'>;
 const currentDate = () => new Date().toISOString().slice(0, 10);
 const inputClass = 'w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20';
 const labelClass = 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500';
+const formatCurrencyInput = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const normalizeDateInput = (value: string) => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : value;
+};
 type SuggestionField = 'procedimentoIncorreto' | 'observacoesAnalista';
 type Suggestions = Record<SuggestionField, string[]>;
 const SUGGESTIONS_STORAGE_KEY = 'cftv_analise_predefinicoes_v1';
@@ -20,7 +28,110 @@ const defaultSuggestions: Suggestions = {
   observacoesAnalista: ['Devolução sem a presença física do produto', 'Cliente leva item devolvido', 'Devolução sem a presença de cliente'],
 };
 
-export const InternalAnalysisForm: React.FC<InternalAnalysisFormProps> = ({ onSubmit, onClose, activeOperador }) => {
+interface DatePickerFieldProps {
+  value: string;
+  onChange: (value: string) => void;
+  minDate?: string;
+  maxDate?: string;
+}
+
+export const DatePickerField: React.FC<DatePickerFieldProps> = ({ value, onChange, minDate, maxDate }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedDate = new Date(`${value}T12:00:00`);
+  const [visibleMonth, setVisibleMonth] = useState(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+  const daysInMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate();
+  const firstDay = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1).getDay();
+  const calendarDays = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)];
+  const monthLabel = visibleMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+  useEffect(() => {
+    const close = () => setIsOpen(false);
+    window.addEventListener('cftv:close-pickers', close);
+    return () => window.removeEventListener('cftv:close-pickers', close);
+  }, []);
+
+  const togglePicker = () => {
+    if (!isOpen) window.dispatchEvent(new Event('cftv:close-pickers'));
+    setIsOpen((current) => !current);
+  };
+
+  const selectDay = (day: number) => {
+    const selected = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), day);
+    const dateValue = `${selected.getFullYear()}-${String(selected.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    if ((minDate && dateValue < minDate) || (maxDate && dateValue > maxDate)) return;
+    onChange(dateValue);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <Calendar className="pointer-events-none absolute left-3 top-2.5 z-10 h-4 w-4 text-slate-400" />
+      <button type="button" className={`${inputClass} pl-9 text-left`} onClick={togglePicker}>
+        {value.split('-').reverse().join('/')}
+      </button>
+      {isOpen && <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded border border-slate-300 bg-white p-3 shadow-lg">
+        <div className="mb-2 flex items-center justify-between">
+          <button type="button" aria-label="Mês anterior" className="rounded px-2 py-1 text-slate-600 hover:bg-slate-100" onClick={() => setVisibleMonth(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}>‹</button>
+          <span className="text-xs font-bold capitalize text-slate-700">{monthLabel}</span>
+          <button type="button" aria-label="Próximo mês" className="rounded px-2 py-1 text-slate-600 hover:bg-slate-100" onClick={() => setVisibleMonth(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}>›</button>
+        </div>
+        <div className="grid grid-cols-7 text-center text-[10px] font-bold text-slate-400">{['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((day, index) => <span key={`${day}-${index}`} className="py-1">{day}</span>)}</div>
+        <div className="grid grid-cols-7 gap-1 text-center text-xs">
+          {calendarDays.map((day, index) => {
+            if (!day) return <span key={`empty-${index}`} />;
+            const isSelected = selectedDate.getFullYear() === visibleMonth.getFullYear() && selectedDate.getMonth() === visibleMonth.getMonth() && selectedDate.getDate() === day;
+            const dateValue = `${visibleMonth.getFullYear()}-${String(visibleMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const isDisabled = Boolean((minDate && dateValue < minDate) || (maxDate && dateValue > maxDate));
+            return <button key={day} type="button" disabled={isDisabled} onClick={() => selectDay(day)} className={`h-7 rounded border text-xs ${isDisabled ? 'cursor-not-allowed border-transparent text-slate-300' : isSelected ? 'border-slate-400 bg-slate-100 font-bold text-slate-800' : 'border-transparent text-slate-700 hover:border-slate-300 hover:bg-slate-50'}`}>{day}</button>;
+          })}
+        </div>
+      </div>}
+    </div>
+  );
+};
+
+interface TimePickerFieldProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+export const TimePickerField: React.FC<TimePickerFieldProps> = ({ value, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const hoursListRef = useRef<HTMLDivElement>(null);
+  const [hours = '00', minutes = '00'] = value.split(':');
+  const selectTime = (nextHours: string, nextMinutes: string) => onChange(`${nextHours}:${nextMinutes}`);
+  const timeOptions = (length: number) => Array.from({ length }, (_, index) => String(index).padStart(2, '0'));
+
+  useEffect(() => {
+    const close = () => setIsOpen(false);
+    window.addEventListener('cftv:close-pickers', close);
+    return () => window.removeEventListener('cftv:close-pickers', close);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && hoursListRef.current) {
+      hoursListRef.current.scrollTop = 8 * 32;
+    }
+  }, [isOpen]);
+
+  return (
+    <div className="relative">
+      <Clock className="pointer-events-none absolute left-3 top-2.5 z-10 h-4 w-4 text-slate-400" />
+      <button type="button" className={`${inputClass} pl-9 text-left`} onClick={() => { if (!isOpen) window.dispatchEvent(new Event('cftv:close-pickers')); setIsOpen((current) => !current); }}>{value}</button>
+      {isOpen && <div className="absolute left-0 top-full z-30 mt-1 flex gap-2 rounded border border-slate-300 bg-white p-3 shadow-lg">
+        {[{ label: 'Hora', values: timeOptions(24), selected: hours }, { label: 'Minuto', values: timeOptions(60), selected: minutes }].map(({ label, values, selected }) => <div key={label}>
+          <span className="mb-1 block text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+          <div ref={label === 'Hora' ? hoursListRef : undefined} className="h-48 w-16 overflow-y-auto rounded border border-slate-200 bg-white p-1">
+            {values.map((option) => <button key={option} type="button" onClick={() => selectTime(label === 'Hora' ? option : hours, label === 'Minuto' ? option : minutes)} className={`block w-full rounded border px-1 py-1 text-xs ${selected === option ? 'border-slate-300 bg-slate-100 font-bold text-slate-800' : 'border-transparent text-slate-600 hover:border-slate-300 hover:bg-slate-50'}`}>{option}</button>)}
+          </div>
+        </div>)}
+        <button type="button" className="absolute -right-2 -top-2 rounded-full border border-slate-300 bg-white px-1.5 text-xs text-slate-500" aria-label="Fechar seleção de horário" onClick={() => setIsOpen(false)}>×</button>
+      </div>}
+    </div>
+  );
+};
+
+export const InternalAnalysisForm: React.FC<InternalAnalysisFormProps> = ({ onSubmit, onClose, activeOperador, initialData }) => {
   const [suggestions, setSuggestions] = useState<Suggestions>(() => {
     try {
       const saved = localStorage.getItem(SUGGESTIONS_STORAGE_KEY);
@@ -32,13 +143,19 @@ export const InternalAnalysisForm: React.FC<InternalAnalysisFormProps> = ({ onSu
   });
   const [isManagingSuggestions, setIsManagingSuggestions] = useState(false);
   const [newSuggestion, setNewSuggestion] = useState<Record<SuggestionField, string>>({ procedimentoIncorreto: '', observacoesAnalista: '' });
-  const [formData, setFormData] = useState<AnalysisFormData>({
+  const [formData, setFormData] = useState<AnalysisFormData>(() => initialData ? {
+    ...initialData,
+    dataOperacao: normalizeDateInput(initialData.dataOperacao),
+    dataAnalise: normalizeDateInput(initialData.dataAnalise),
+    evidencia: initialData.evidencia || [],
+    imagens: initialData.imagens || [],
+  } : {
     dataOperacao: currentDate(), dataAnalise: currentDate(), horario: new Date().toTimeString().slice(0, 5),
     loja: '', tipo: '', pdv: '', operador: '', supervisor: '', valor: 0,
     parecer: 'Pendente', status: 'Em analise', motivoOperador: '', procedimentoIncorreto: '',
     observacoesAnalista: '', evidencia: [], onedriveLink: '', imagens: [],
   });
-  const [evidenceText, setEvidenceText] = useState('');
+  const [evidenceText, setEvidenceText] = useState(initialData?.evidencia?.[0] || '');
   const [imagesLoading, setImagesLoading] = useState(0);
   const [validationError, setValidationError] = useState('');
   useEffect(() => {
@@ -50,6 +167,11 @@ export const InternalAnalysisForm: React.FC<InternalAnalysisFormProps> = ({ onSu
   }, [suggestions]);
 
   const update = <K extends keyof AnalysisFormData>(field: K, value: AnalysisFormData[K]) => setFormData((current) => ({ ...current, [field]: value }));
+
+  const handleCurrencyChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = event.target.value.replace(/\D/g, '');
+    update('valor', digits ? Number(digits) / 100 : 0);
+  };
 
   const addSuggestion = (field: SuggestionField, suggestion: string) => {
     const current = formData[field].trim();
@@ -123,20 +245,20 @@ export const InternalAnalysisForm: React.FC<InternalAnalysisFormProps> = ({ onSu
   };
 
   return (
-    <div className="overflow-hidden rounded border border-slate-200 bg-white shadow-xs">
-      <div className="flex items-center justify-between bg-slate-800 px-4 py-3">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-white">Nova Análise Interna</h2>
-        <button type="button" onClick={onClose} aria-label="Fechar análise interna" className="rounded p-1 text-slate-300 hover:bg-slate-700 hover:text-white"><X className="h-4 w-4" /></button>
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
+      <div className="relative flex justify-center bg-white px-4 py-4">
+        <img src={abilityImage} alt="Análise interna" className="h-16 w-16 object-contain" />
+        <button type="button" onClick={onClose} aria-label="Fechar análise interna" className="absolute right-3 top-3 rounded bg-slate-100 p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-900"><X className="h-4 w-4" /></button>
       </div>
-      <div className="space-y-4 bg-slate-50 p-4">
+      <div className="scrollbar-hidden space-y-4 bg-slate-50 p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div><label className={labelClass}>Data da operação</label><div className="relative"><Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input type="date" className={`${inputClass} pl-9`} value={formData.dataOperacao} onChange={(e) => update('dataOperacao', e.target.value)} /></div></div>
-          <div><label className={labelClass}>Data da análise</label><div className="relative"><Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input type="date" className={`${inputClass} pl-9`} value={formData.dataAnalise} onChange={(e) => update('dataAnalise', e.target.value)} /></div></div>
-          <div><label className={labelClass}>Horário</label><div className="relative"><Clock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input type="time" className={`${inputClass} pl-9`} value={formData.horario} onChange={(e) => update('horario', e.target.value)} /></div></div>
+          <div><label className={labelClass}>Data da operação</label><DatePickerField value={formData.dataOperacao} maxDate={formData.dataAnalise} onChange={(value) => update('dataOperacao', value)} /></div>
+          <div><label className={labelClass}>Data da análise</label><DatePickerField value={formData.dataAnalise} minDate={formData.dataOperacao} maxDate={currentDate()} onChange={(value) => update('dataAnalise', value)} /></div>
+          <div><label className={labelClass}>Horário</label><TimePickerField value={formData.horario} onChange={(value) => update('horario', value)} /></div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div><label className={labelClass}>Loja</label><div className="relative"><Store className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><select className={`${inputClass} pl-9`} value={formData.loja} onChange={(e) => update('loja', e.target.value)}><option value="">Selecione</option>{LOJAS_GRUPO.map((loja) => <option key={loja}>{loja}</option>)}</select></div></div>
-          <div><label className={labelClass}>Tipo</label><select className={inputClass} value={formData.tipo} onChange={(e) => update('tipo', e.target.value)}><option value="">Selecione o tipo</option><option>Furto</option><option>Devolução</option><option>Cancelamento</option><option>Procedimento incorreto</option><option>Outro</option></select></div>
+          <div><label className={labelClass}>Tipo</label><select className={inputClass} value={formData.tipo} onChange={(e) => update('tipo', e.target.value)}><option value="">Selecione o tipo</option><option>Devolução</option><option>Cancelamento</option><option>Procedimento incorreto</option><option>Outro</option></select></div>
           <div><label className={labelClass}>PDV</label><input className={inputClass} value={formData.pdv} onChange={(e) => update('pdv', e.target.value)} placeholder="01" /></div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -144,7 +266,7 @@ export const InternalAnalysisForm: React.FC<InternalAnalysisFormProps> = ({ onSu
           <div><label className={labelClass}>Supervisor</label><input className={inputClass} value={formData.supervisor} onChange={(e) => update('supervisor', e.target.value)} placeholder="Nome do supervisor" /></div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div><label className={labelClass}>Valor (R$)</label><div className="relative"><DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input required type="number" min="0" step="0.01" className={`${inputClass} pl-9`} value={formData.valor === 0 ? '' : formData.valor} onChange={(e) => update('valor', e.target.value === '' ? 0 : Number(e.target.value))} /></div></div>
+          <div><label className={labelClass}>Valor (R$)</label><div className="relative"><DollarSign className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input required type="text" inputMode="numeric" className={`${inputClass} pl-9`} value={formatCurrencyInput(formData.valor)} onChange={handleCurrencyChange} /></div></div>
           <div><label className={labelClass}>Parecer</label><select required className={inputClass} value={formData.parecer} onChange={(e) => update('parecer', e.target.value)}><option>Pendente</option><option>Suspeito</option><option>Procedimento incorreto</option></select></div>
           <div><label className={labelClass}>Status</label><select required className={inputClass} value={formData.status} onChange={(e) => update('status', e.target.value)}><option>Em analise</option><option>Concluido</option></select></div>
         </div>

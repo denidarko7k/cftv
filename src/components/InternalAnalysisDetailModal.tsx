@@ -10,13 +10,16 @@ import {
   Trash2,
   User,
   X,
+  Pencil,
 } from 'lucide-react';
 import { InternalAnalysisRecord } from '../types';
+import { InternalAnalysisForm } from './InternalAnalysisForm';
 
 interface InternalAnalysisDetailModalProps {
   analise: InternalAnalysisRecord | null;
   onClose: () => void;
   onDelete?: (id: number) => void;
+  onUpdate?: (id: number, item: Omit<InternalAnalysisRecord, 'id'>) => void;
 }
 
 const formatCurrency = (value: number) =>
@@ -33,10 +36,20 @@ export const InternalAnalysisDetailModal: React.FC<InternalAnalysisDetailModalPr
   analise,
   onClose,
   onDelete,
+  onUpdate,
 }) => {
   const [copied, setCopied] = React.useState(false);
+  const [isEditing, setIsEditing] = React.useState(false);
 
   if (!analise) return null;
+
+  if (isEditing) {
+    return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 p-4" onClick={onClose}>
+      <div className="mx-auto max-w-3xl" onClick={(event) => event.stopPropagation()}>
+        <InternalAnalysisForm initialData={analise} activeOperador={analise.operador} onClose={() => setIsEditing(false)} onSubmit={(item) => { onUpdate?.(analise.id, item); setIsEditing(false); }} />
+      </div>
+    </div>;
+  }
 
   const copyData = () => {
     const text = `ANÁLISE INTERNA #${String(analise.id).padStart(2, '0')}
@@ -151,6 +164,9 @@ Observações: ${analise.observacoesAnalista || 'Não informado'}`;
             </button>
           </div>
           <div className="flex gap-2">
+            <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+              <Pencil className="h-3.5 w-3.5" /> Editar
+            </button>
             <button type="button" onClick={handleDelete} className="inline-flex items-center gap-1.5 rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">
               <Trash2 className="h-3.5 w-3.5" /> Excluir
             </button>
